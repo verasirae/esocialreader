@@ -1,0 +1,304 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("PRISMA_DATABASE_URL")
+  directUrl = env("PRISMA_DIRECT_URL")
+}
+
+model Empresa {
+  id           String   @id @default(cuid())
+  cnpjRaiz     String   @unique @map("cnpj_raiz")
+  cnpjCompleto String?  @map("cnpj_completo")
+  razaoSocial  String?  @map("razao_social")
+  nomeFantasia String?  @map("nome_fantasia")
+  createdAt    DateTime @default(now()) @map("created_at")
+  eventos      S5002[]
+  trabalhadores Trabalhador[]
+
+  @@map("empresa")
+}
+
+model Trabalhador {
+  id              String             @id @default(cuid())
+  cpf             String             @unique
+  nome            String?
+  empresaId       String?            @map("empresa_id")
+  empresa         Empresa?           @relation(fields: [empresaId], references: [id])
+  createdAt       DateTime           @default(now()) @map("created_at")
+  eventos         S5002[]
+  dependenteMaster DependenteMaster[]
+
+  @@map("trabalhador")
+}
+
+model S5002 {
+  id            String            @id @default(cuid())
+  trabalhadorId String            @map("trabalhador_id")
+  trabalhador   Trabalhador       @relation(fields: [trabalhadorId], references: [id])
+  empresaId     String            @map("empresa_id")
+  empresa       Empresa           @relation(fields: [empresaId], references: [id])
+  competencia   DateTime          @map("competencia")
+  nrRecibo      String?           @map("nr_recibo")
+  xmlHash       String            @unique @map("xml_hash")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  
+  demonstrativos S5002DmDev[]
+  totais         S5002Totais[]
+  dependentes    S5002Dependente[]
+  planosSaude    S5002PlanoSaude[]
+
+  @@map("s5002")
+}
+
+model S5002DmDev {
+  id        String          @id @default(cuid())
+  s5002Id   String          @map("s5002_id")
+  s5002     S5002           @relation(fields: [s5002Id], references: [id])
+  ideDmDev  String?         @map("ide_dmdev")
+  dtPgto    DateTime?       @map("dt_pgto")
+  tpPgto    Int?            @map("tp_pgto")
+  
+  infoIris  S5002InfoIR[]
+
+  @@map("s5002_dmdev")
+}
+
+model S5002InfoIR {
+  id          String     @id @default(cuid())
+  dmDevId     String     @map("dmdev_id")
+  dmDev       S5002DmDev @relation(fields: [dmDevId], references: [id])
+  tpInfoIR    String     @map("tp_info_ir")
+  valor       Decimal
+  descricao   String?
+
+  @@map("s5002_info_ir")
+}
+
+model S5002Totais {
+  id            String  @id @default(cuid())
+  s5002Id       String  @map("s5002_id")
+  s5002         S5002   @relation(fields: [s5002Id], references: [id])
+  codReceita    String  @map("cod_receita")
+  
+  vlrRendTrib      Decimal @default(0) @map("vlr_rend_trib")
+  vlrRendTrib13    Decimal @default(0) @map("vlr_rend_trib_13")
+  vlrPrevOficial   Decimal @default(0) @map("vlr_prev_oficial")
+  vlrPrevOficial13 Decimal @default(0) @map("vlr_prev_oficial_13")
+  vlrIrrf          Decimal @default(0) @map("vlr_irrf")
+  vlrIsento        Decimal @default(0) @map("vlr_isento")
+
+  @@map("s5002_totais")
+}
+
+model DependenteMaster {
+  id            String   @id @default(cuid())
+  trabalhadorId String   @map("trabalhador_id")
+  trabalhador   Trabalhador @relation(fields: [trabalhadorId], references: [id])
+  
+  cpf           String   @unique
+  nome          String
+  dtNascimento  DateTime? @map("dt_nascimento")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  linksS5002    S5002Dependente[]
+  planosSaude   S5002PlanoSaudeDep[]
+
+  @@map("dependente_master")
+}
+
+model S5002Dependente {
+  id           String           @id @default(cuid())
+  s5002Id      String           @map("s5002_id")
+  s5002        S5002            @relation(fields: [s5002Id], references: [id])
+  dependenteId String           @map("dependente_id")
+  dependente   DependenteMaster @relation(fields: [dependenteId], references: [id])
+  
+  tpDep        String?          @map("tp_dep")
+  deduzIrrf    Boolean          @default(false) @map("deduz_irrf")
+
+  @@map("s5002_dependentes")
+}
+
+model S5002PlanoSaude {
+  id            String  @id @default(cuid())
+  s5002Id       String  @map("s5002_id")
+  s5002         S5002   @relation(fields: [s5002Id], references: [id])
+  
+  cnpjOperadora String  @map("cnpj_operadora")
+  registroAns   String? @map("registro_ans")
+  vlrTitular    Decimal @default(0) @map("vlr_titular")
+  
+  beneficarios S5002PlanoSaudeDep[]
+
+  @@map("s5002_plano_saude")
+}
+
+model S5002PlanoSaudeDep {
+  id           String           @id @default(cuid())
+  planoSaudeId String           @map("plano_saude_id")
+  planoSaude   S5002PlanoSaude  @relation(fields: [planoSaudeId], references: [id])
+  dependenteId String           @map("dependente_id")
+  dependente   DependenteMaster @relation(fields: [dependenteId], references: [id])
+  
+  vlrDependente Decimal @default(0) @map("vlr_dependente")
+
+  @@map("s5002_plano_saude_dep")
+}
+
+model EsocialTabela01 {
+  id          String    @id @default(cuid())
+  codigo      String
+  descricao   String
+  dtInicio    DateTime  @map("dt_inicio")
+  dtFim       DateTime? @map("dt_fim")
+  grupo       String?
+  aliqFgts    String?   @map("aliq_fgts")
+  obriga      String?   @map("obriga")
+  aliqFgtsCo  String?   @map("aliq_fgts_co")
+  cp          String?   @map("cp")
+  econsignado String?   @map("econsignado")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_01")
+}
+
+model EsocialTabela03 {
+  id                          String    @id @default(cuid())
+  codigo                      String
+  nome                        String?
+  dtInicio                    DateTime  @map("dt_inicio")
+  dtFim                       DateTime? @map("dt_fim")
+  descricao                   String?
+  incidenciaExclusivaEmpregado String?   @map("inc_excl_emp")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_03")
+}
+
+model EsocialTabela05 {
+  id        String    @id @default(cuid())
+  codigo    String
+  descricao String
+  dtInicio  DateTime  @map("dt_inicio")
+  dtFim     DateTime? @map("dt_fim")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_05")
+}
+
+model EsocialTabela21 {
+  id        String    @id @default(cuid())
+  codigo    String
+  descricao String
+  dtInicio  DateTime  @map("dt_inicio")
+  dtFim     DateTime? @map("dt_fim")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_21")
+}
+
+model EsocialImportLog {
+  id         String   @id @default(cuid())
+  tableId    String   @map("table_id")
+  fileName   String   @map("file_name")
+  processed  Int
+  errors     Int
+  status     String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("esocial_import_logs")
+}
+
+model EsocialTabela25 {
+  id        String    @id @default(cuid())
+  codigo    String
+  descricao String
+  dtInicio  DateTime  @map("dt_inicio")
+  dtFim     DateTime? @map("dt_fim")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_25")
+}
+
+model EsocialTabela54 {
+  id              String    @id @default(cuid())
+  codRubrica      String    @map("cod_rubrica")
+  nomeRubrica     String?   @map("nome_rubrica")
+  dtInicio        DateTime  @map("dt_inicio")
+  dtFim           DateTime? @map("dt_fim")
+  natRubrica      String?   @map("nat_rubrica")
+  tipoRubrica     String?   @map("tipo_rubrica")
+  codIncCp        String?   @map("cod_inc_cp")
+  codIncIrrf      String?   @map("cod_inc_irrf")
+  codIncFgts      String?   @map("cod_inc_fgts")
+  codIncSind      String?   @map("cod_inc_sind")
+  repDsr          String?   @map("rep_dsr")
+  rep13           String?   @map("rep_13")
+  repFerias       String?   @map("rep_ferias")
+  repResc         String?   @map("rep_resc")
+  repAfast        String?   @map("rep_afast")
+  fatorRubr       String?   @map("fator_rubr")
+  localAplic      String?   @map("local_aplic")
+  domestica       String?   @map("domestica")
+  se              String?   @map("se")
+  geral           String?   @map("geral")
+  descricao       String?   @map("descricao")
+  nota            String?   @map("nota")
+  ordRescDom      String?   @map("ord_resc_dom")
+  perAdicRub      String?   @map("per_adic_rub")
+  ordRemDom       String?   @map("ord_rem_dom")
+  repSfDom        String?   @map("rep_sf_dom")
+  perFolRes       String?   @map("per_fol_res")
+  perEditRub      String?   @map("per_edit_rub")
+  perExcRub       String?   @map("per_exc_rub")
+  filCatRub       String?   @map("fil_cat_rub")
+  grupRendDom     String?   @map("grup_rend_dom")
+  codIncCprp      String?   @map("cod_inc_cprp")
+  codIncPisPasep  String?   @map("cod_inc_pis_pasep")
+  rdConsignado    String?   @map("rd_consignado")
+
+  @@unique([codRubrica, dtInicio])
+  @@map("esocial_tabela_54")
+}
+
+model EsocialTabela78 {
+  id        String    @id @default(cuid())
+  codigo    String
+  descricao String
+  dtInicio  DateTime  @map("dt_inicio")
+  dtFim     DateTime? @map("dt_fim")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_78")
+}
+
+model EsocialTabela80 {
+  id        String    @id @default(cuid())
+  codigo    String
+  descricao String
+  dtInicio  DateTime  @map("dt_inicio")
+  dtFim     DateTime? @map("dt_fim")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_80")
+}
+
+enum TipoOperadora {
+  medica
+  odonto
+  ambos
+}
+
+model OperadoraSaude {
+  id          String        @id @default(cuid())
+  cnpj        String        @unique
+  registroAns String?       @map("registro_ans")
+  nome        String?
+  tipo        TipoOperadora
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@map("operadora_saude")
+}

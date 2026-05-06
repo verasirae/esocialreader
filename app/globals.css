@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme {
+  /* Colors from Architectural Utility Theme */
+  --color-primary: #1B365D;
+  --color-primary-container: #1b365d;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #87a0cd;
+  
+  --color-secondary: #5c5f60;
+  --color-secondary-container: #e1e3e4;
+  
+  --color-tertiary: #4F2F00;
+  --color-tertiary-container: #4f2f00;
+  --color-on-tertiary-container: #c6965e;
+  
+  --color-neutral: #77777A;
+  
+  --color-background: #FAF9FC;
+  --color-surface: #FAF9FC;
+  --color-on-surface: #1B1C1E;
+  --color-on-surface-variant: #44474E;
+  
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f4f3f6;
+  --color-surface-container: #EFEDF0;
+  --color-surface-container-high: #E9E7EB;
+  --color-surface-container-highest: #E3E2E5;
+  
+  --color-outline: #74777F;
+  --color-outline-variant: #C4C6CF;
+  
+  --color-error: #ba1a1a;
+
+  /* Spacing Grid (4px Baseline) */
+  --spacing-unit: 4px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-gutter: 16px;
+  --spacing-margin-page: 24px;
+
+  --font-sans: var(--font-sans), "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface font-sans;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-outline-variant rounded-sm shadow-[0_2px_4px_rgba(0,0,0,0.04)];
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-6 py-3 text-secondary hover:bg-surface-container transition-colors duration-200 text-sm;
+  }
+
+  .sidebar-item-active {
+    @apply text-primary font-bold border-r-4 border-primary bg-surface-container-high;
+  }
+
+  .input-field {
+    @apply bg-surface border border-outline-variant px-4 py-2 rounded-sm focus:ring-2 focus:ring-primary-container outline-none text-sm transition-all;
+  }
+
+  .btn-primary {
+    @apply px-6 py-2 bg-primary text-white font-semibold text-xs rounded-sm hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2;
+  }
+
+  .btn-outline {
+    @apply px-6 py-2 border border-outline text-primary font-semibold text-xs rounded-sm hover:bg-surface-container transition-all;
+  }
+}
