@@ -18,13 +18,29 @@ export async function GET(req: NextRequest) {
         csvHeader = "CODIGO|NOME|DTINICIO|DTFIM|DESCRICAO|INCIDENCIAEXCLUSIVAEMPREGADO\n";
         data = await prisma.esocialTabela03.findMany();
         break;
+      case "05":
+        csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM\n";
+        data = await prisma.esocialTabela05.findMany();
+        break;
       case "21":
         csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM\n";
         data = await prisma.esocialTabela21.findMany();
         break;
+      case "25":
+        csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM\n";
+        data = await prisma.esocialTabela25.findMany();
+        break;
       case "54":
         csvHeader = "cod_rubrica|nome_rubrica|dt_inicio|dt_fim|nat_rubrica|tipo_rubrica|cod_inc_cp|cod_inc_irrf|cod_inc_fgts|cod_inc_sind|rep_dsr|rep_13|rep_ferias|rep_resc|rep_afast|fator_rubr|local_aplic|domestica|se|geral|descricao|nota|ord_resc_dom|per_adic_rub|ord_rem_dom|rep_sf_dom|per_fol_res|per_edit_rub|per_exc_rub|fil_cat_rub|grup_rend_dom|cod_inc_cprp|cod_inc_pis_pasep|rd_consignado\n";
         data = await prisma.esocialTabela54.findMany();
+        break;
+      case "78":
+        csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM\n";
+        data = await prisma.esocialTabela78.findMany();
+        break;
+      case "80":
+        csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM\n";
+        data = await prisma.esocialTabela80.findMany();
         break;
     }
 

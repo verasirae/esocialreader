@@ -8,7 +8,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
     const search = searchParams.get("search") || "";
-    const pageSize = 10;
+    const takeParam = searchParams.get("take") || searchParams.get("limit") || "10";
+    const pageSize = parseInt(takeParam);
     const skip = (page - 1) * pageSize;
 
     const trabalhadores = await prisma.trabalhador.findMany({

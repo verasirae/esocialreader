@@ -14,6 +14,19 @@ export function RegisterOperadoraModal() {
     tipo: "medica"
   });
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (errorMessage || successMessage) {
+      const timer = setTimeout(() => {
+        setErrorMessage(null);
+        setSuccessMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage, successMessage]);
+
   useEffect(() => {
     if (editingOperadora) {
       setOperadoraForm({
@@ -25,6 +38,8 @@ export function RegisterOperadoraModal() {
     } else {
       setOperadoraForm({ cnpj: "", registroAns: "", nome: "", tipo: "medica" });
     }
+    setErrorMessage(null);
+    setSuccessMessage(null);
   }, [editingOperadora, isRegisterOperadoraModalOpen]);
 
   if (!isRegisterOperadoraModalOpen) return null;
@@ -32,7 +47,10 @@ export function RegisterOperadoraModal() {
   const handleOperadoraSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
     try {
+      console.log("Enviando dados da operadora:", operadoraForm);
       const res = await fetch("/api/esocial/operadoras/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -49,15 +67,18 @@ export function RegisterOperadoraModal() {
       }
 
       if (res.ok) {
-        alert(editingOperadora ? "Operadora atualizada com sucesso!" : "Operadora cadastrada com sucesso!");
-        closeRegisterOperadoraModal();
-        setOperadoraForm({ cnpj: "", registroAns: "", nome: "", tipo: "medica" });
-        window.dispatchEvent(new CustomEvent("operadora-added"));
+        setSuccessMessage(editingOperadora ? "Operadora atualizada!" : "Operadora cadastrada!");
+        setTimeout(() => {
+          closeRegisterOperadoraModal();
+          setOperadoraForm({ cnpj: "", registroAns: "", nome: "", tipo: "medica" });
+          window.dispatchEvent(new CustomEvent("operadora-added"));
+        }, 1500);
       } else {
-        throw new Error(data.error || "Erro ao salvar");
+        throw new Error(data.details || data.error || "Erro ao salvar");
       }
     } catch (err: any) {
-      alert("Erro: " + err.message);
+      console.error("Erro no submit da operadora:", err);
+      setErrorMessage(err.message || "Erro desconhecido");
     } finally {
       setIsLoading(false);
     }
@@ -89,6 +110,16 @@ export function RegisterOperadoraModal() {
         </div>
         
         <form onSubmit={handleOperadoraSubmit} className="p-8 space-y-6">
+          {errorMessage && (
+            <div className="p-3 bg-error/10 border border-error/20 rounded-sm text-error text-xs font-bold">
+              {errorMessage}
+            </div>
+          )}
+          {successMessage && (
+            <div className="p-3 bg-primary/10 border border-primary/20 rounded-sm text-primary text-xs font-bold">
+              {successMessage}
+            </div>
+          )}
           <div className="space-y-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-black text-secondary uppercase tracking-widest">CNPJ (14 dígitos)</label>

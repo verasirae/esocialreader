@@ -24,10 +24,11 @@ export async function POST(req: NextRequest) {
     for (const row of data) {
       try {
         // Mapeamento flexível de colunas
-        const cpf = String(row.CPF || row.cpf || "").replace(/\D/g, "");
+        const cpfRaw = String(row.CPF || row.cpf || "").replace(/\D/g, "");
+        const cpf = cpfRaw.padStart(11, "0");
         const nome = String(row.Nome || row.nome || row.NOME || "");
         const cnpjEmpregadorRaw = String(row.CNPJ_Empregador || row.cnpj_empregador || row.CNPJ || "");
-        const cnpjEmpregador = cnpjEmpregadorRaw.replace(/\D/g, "");
+        const cnpjEmpregador = cnpjEmpregadorRaw.replace(/\D/g, "").padStart(14, "0");
 
         if (!cpf || cpf.length !== 11 || !nome) {
           errors++;
@@ -66,24 +67,47 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        await prisma.trabalhador.upsert({
-          where: { cpf },
-          update: { 
-            nome,
-            empresaId: empresaId || undefined
-          },
-          create: { 
-            cpf,
-            nome,
-            empresaId: empresaId || null
-          }
-        });
-
-        processed++;
+        if (empresaId) {
+          await prisma.trabalhador.upsert({
+            where: { 
+              empresaId_cpf: {
+                empresaId,
+                cpf
+              }
+            },
+            update: { 
+              nome,
+              empresaId
+            },
+            create: { 
+              cpf,
+              nome,
+              empresaId
+            }
+          });
+          processed++;
+        } else {
+          errors++;
+        }
       } catch (err) {
         console.error("Erro na linha:", row, err);
         errors++;
       }
+    }
+
+    // Registrar Log no Histórico Centralizado
+    try {
+      await prisma.esocialImportLog.create({
+        data: {
+          tableId: "Trabalhadores",
+          fileName: file.name,
+          processed,
+          errors,
+          status: errors === 0 ? "Sucesso" : processed > 0 ? "Concluído com avisos" : "Falha",
+        }
+      });
+    } catch (logErr) {
+      console.error("[Excel-Import] Falha ao registrar log:", logErr);
     }
 
     return safeJson({ success: true, processed, errors });

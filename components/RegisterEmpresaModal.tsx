@@ -16,7 +16,7 @@ export function RegisterEmpresaModal() {
   useEffect(() => {
     if (editingEmpresa) {
       setEmpresaForm({
-        cnpjCompleto: editingEmpresa.cnpjCompleto || "",
+        cnpjCompleto: editingEmpresa.cnpjCompleto || editingEmpresa.cnpjRaiz || "",
         razaoSocial: editingEmpresa.razaoSocial || "",
         nomeFantasia: editingEmpresa.nomeFantasia || ""
       });

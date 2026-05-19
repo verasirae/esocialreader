@@ -8,145 +8,730 @@ datasource db {
   directUrl = env("PRISMA_DIRECT_URL")
 }
 
+//////////////////////////////////////////////////////
+// ENUMS
+//////////////////////////////////////////////////////
+
+enum EsocialAmbiente {
+  producao
+  producao_restrita
+}
+
+enum StatusProcessamento {
+  pendente
+  processando
+  processado
+  erro
+  invalidado
+  substituido
+}
+
+enum TipoAcaoHistorico {
+  upload
+  parse
+  consolidacao
+  retificacao
+  substituicao
+  reprocessamento
+  exclusao_logica
+  erro
+}
+
+enum TipoPeriodo {
+  mensal
+  decimo_terceiro
+  ferias
+  plr
+  retroativo
+}
+
+enum TipoOperadora {
+  medica
+  odonto
+  ambos
+}
+
+//////////////////////////////////////////////////////
+// EMPRESA
+//////////////////////////////////////////////////////
+
 model Empresa {
-  id           String   @id @default(cuid())
-  cnpjRaiz     String   @unique @map("cnpj_raiz")
-  cnpjCompleto String?  @map("cnpj_completo")
-  razaoSocial  String?  @map("razao_social")
-  nomeFantasia String?  @map("nome_fantasia")
-  createdAt    DateTime @default(now()) @map("created_at")
-  eventos      S5002[]
-  trabalhadores Trabalhador[]
+  id                    String                    @id @default(cuid())
+
+  cnpjRaiz              String                    @unique @map("cnpj_raiz")
+  cnpjCompleto          String?                   @map("cnpj_completo")
+
+  razaoSocial           String?                   @map("razao_social")
+  nomeFantasia          String?                   @map("nome_fantasia")
+
+  ambienteEsocial       EsocialAmbiente           @default(producao) @map("ambiente_esocial")
+
+  ultimaSincronizacao   DateTime?                 @map("ultima_sincronizacao")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+
+  trabalhadores         Trabalhador[]
+  lotes                 EsocialLote[]
+  eventos               EsocialEvento[]
+  s5002Eventos          S5002Evento[]
+  consolidacoes         S5002ConsolidadoPeriodo[]
+  consolidacoesAnuais   S5002ConsolidadoAnual[]
+  certificados          CertificadoDigital[]
 
   @@map("empresa")
 }
 
+//////////////////////////////////////////////////////
+// TRABALHADOR
+//////////////////////////////////////////////////////
+
 model Trabalhador {
-  id              String             @id @default(cuid())
-  cpf             String             @unique
-  nome            String?
-  empresaId       String?            @map("empresa_id")
-  empresa         Empresa?           @relation(fields: [empresaId], references: [id])
-  createdAt       DateTime           @default(now()) @map("created_at")
-  eventos         S5002[]
-  dependenteMaster DependenteMaster[]
+  id                    String                    @id @default(cuid())
+
+  empresaId             String                    @map("empresa_id")
+  empresa               Empresa                   @relation(fields: [empresaId], references: [id])
+
+  cpf                   String
+  nis                   String?
+  matricula             String?
+
+  nome                  String?
+
+  categoriaEsocial      String?                   @map("categoria_esocial")
+
+  ativo                 Boolean                   @default(true)
+
+  dtAdmissao            DateTime?                 @map("dt_admissao")
+  dtDesligamento        DateTime?                 @map("dt_desligamento")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+
+  eventos               EsocialEvento[]
+  s5002Eventos          S5002Evento[]
+
+  dependentesMaster     DependenteMaster[]
+
+  consolidacoes         S5002ConsolidadoPeriodo[]
+  consolidacoesAnuais   S5002ConsolidadoAnual[]
+
+  @@unique([empresaId, cpf])
+
+  @@index([empresaId])
+  @@index([cpf])
 
   @@map("trabalhador")
 }
 
-model S5002 {
-  id            String            @id @default(cuid())
-  trabalhadorId String            @map("trabalhador_id")
-  trabalhador   Trabalhador       @relation(fields: [trabalhadorId], references: [id])
-  empresaId     String            @map("empresa_id")
-  empresa       Empresa           @relation(fields: [empresaId], references: [id])
-  competencia   DateTime          @map("competencia")
-  nrRecibo      String?           @map("nr_recibo")
-  xmlHash       String            @unique @map("xml_hash")
-  createdAt     DateTime          @default(now()) @map("created_at")
-  
-  demonstrativos S5002DmDev[]
-  totais         S5002Totais[]
-  dependentes    S5002Dependente[]
-  planosSaude    S5002PlanoSaude[]
+//////////////////////////////////////////////////////
+// LOTE IMPORTAÇÃO XML
+//////////////////////////////////////////////////////
 
-  @@map("s5002")
+model EsocialXmlStorage {
+  id           String   @id @default(cuid())
+  hashArquivo  String   @unique @map("hash_arquivo")
+  storagePath  String   @map("storage_path")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  lotes        EsocialLote[]
+
+  @@map("esocial_xml_storage")
 }
 
+model EsocialLote {
+  id                    String                    @id @default(cuid())
+
+  empresaId             String?                   @map("empresa_id")
+  empresa               Empresa?                  @relation(fields: [empresaId], references: [id])
+
+  storageId             String?                   @map("storage_id")
+  storage               EsocialXmlStorage?        @relation(fields: [storageId], references: [id])
+
+  hashArquivo           String                    @map("hash_arquivo")
+
+  nomeArquivo           String?                   @map("nome_arquivo")
+
+  storagePath           String                    @map("storage_path")
+
+  totalEventos          Int                       @default(0) @map("total_eventos")
+
+  status                StatusProcessamento       @default(pendente)
+
+  processadoEm          DateTime?                 @map("processado_em")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  eventos               EsocialEvento[]
+
+  @@index([hashArquivo])
+  @@map("esocial_lote")
+}
+
+//////////////////////////////////////////////////////
+// EVENTO BASE
+//////////////////////////////////////////////////////
+
+model EsocialEvento {
+  id                    String                    @id @default(cuid())
+
+  loteId                String?                   @map("lote_id")
+  lote                  EsocialLote?              @relation(fields: [loteId], references: [id])
+
+  empresaId             String?                   @map("empresa_id")
+  empresa               Empresa?                  @relation(fields: [empresaId], references: [id])
+
+  trabalhadorId         String?                   @map("trabalhador_id")
+  trabalhador           Trabalhador?              @relation(fields: [trabalhadorId], references: [id])
+
+  eventoId              String                    @unique @map("evento_id")
+
+  tpEvento              String                    @map("tp_evento")
+
+  perApur               String                    @map("per_apur")
+
+  cnpjRaiz              String?                   @map("cnpj_raiz")
+  cpfBenef              String?                   @map("cpf_benef")
+
+  indRetif              Int?                      @map("ind_retif")
+
+  nrRecibo              String?                   @map("nr_recibo")
+
+  nrReciboOrig          String?                   @map("nr_recibo_orig")
+
+  xmlHash               String                    @map("xml_hash")
+
+  xmlPath               String?                   @map("xml_path")
+
+  ativo                 Boolean                   @default(true)
+
+  substituidoPorId      String?                   @map("substituido_por_id")
+  substituidoPor        EsocialEvento?            @relation("EventoSubstituicao", fields: [substituidoPorId], references: [id])
+
+  eventosSubstituidos   EsocialEvento[]           @relation("EventoSubstituicao")
+
+  status                StatusProcessamento       @default(pendente)
+
+  processadoEm          DateTime?                 @map("processado_em")
+
+  invalidadoEm          DateTime?                 @map("invalidado_em")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+
+  s5002                 S5002Evento?
+
+  historicos            EsocialEventoHistorico[]
+  consolidacoesOrigem   S5002ConsolidadoPeriodo[]
+  divergencias          DivergenciaFiscal[]
+
+  @@index([empresaId, perApur])
+  @@index([trabalhadorId, perApur])
+
+  @@index([nrRecibo])
+  @@index([nrReciboOrig])
+
+  @@index([ativo])
+
+  @@map("esocial_evento")
+}
+
+//////////////////////////////////////////////////////
+// HISTÓRICO / AUDITORIA
+//////////////////////////////////////////////////////
+
+model EsocialEventoHistorico {
+  id                    String                    @id @default(cuid())
+
+  eventoId              String                    @map("evento_id")
+  evento                EsocialEvento             @relation(fields: [eventoId], references: [id])
+
+  acao                  TipoAcaoHistorico
+
+  descricao             String?
+
+  payloadAntes          Json?                     @map("payload_antes")
+  payloadDepois         Json?                     @map("payload_depois")
+
+  usuario               String?
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  @@index([eventoId])
+
+  @@map("esocial_evento_historico")
+}
+
+//////////////////////////////////////////////////////
+// S5002 EVENTO RAW
+//////////////////////////////////////////////////////
+
+model S5002Evento {
+  id                    String                    @id @default(cuid())
+
+  eventoId              String                    @unique @map("evento_id")
+  evento                EsocialEvento             @relation(fields: [eventoId], references: [id])
+
+  empresaId             String?                   @map("empresa_id")
+  empresa               Empresa?                  @relation(fields: [empresaId], references: [id])
+
+  trabalhadorId         String?                   @map("trabalhador_id")
+  trabalhador           Trabalhador?              @relation(fields: [trabalhadorId], references: [id])
+
+  perApur               String                    @map("per_apur")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  demonstrativos        S5002DmDev[]
+  periodosAnteriores    S5002PeriodoAnterior[]
+
+  @@index([empresaId, perApur])
+  @@index([trabalhadorId, perApur])
+
+  @@map("s5002_evento")
+}
+
+//////////////////////////////////////////////////////
+// DMDEV
+//////////////////////////////////////////////////////
+
 model S5002DmDev {
-  id        String          @id @default(cuid())
-  s5002Id   String          @map("s5002_id")
-  s5002     S5002           @relation(fields: [s5002Id], references: [id])
-  ideDmDev  String?         @map("ide_dmdev")
-  dtPgto    DateTime?       @map("dt_pgto")
-  tpPgto    Int?            @map("tp_pgto")
-  
-  infoIris  S5002InfoIR[]
+  id                    String                    @id @default(cuid())
+
+  s5002EventoId         String                    @map("s5002_evento_id")
+  s5002Evento           S5002Evento               @relation(fields: [s5002EventoId], references: [id])
+
+  ideDmDev              String                    @map("ide_dmdev")
+
+  perRef                String                    @map("per_ref")
+
+  dtPgto                DateTime?                 @map("dt_pgto")
+
+  tpPgto                Int?                      @map("tp_pgto")
+
+  codCateg              String?                   @map("cod_categ")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  infoIR                S5002InfoIR[]
+  totais                S5002TotApurMen[]
+
+  @@unique([s5002EventoId, ideDmDev, perRef])
+
+  @@index([perRef])
 
   @@map("s5002_dmdev")
 }
 
+//////////////////////////////////////////////////////
+// INFO IR
+//////////////////////////////////////////////////////
+
 model S5002InfoIR {
-  id          String     @id @default(cuid())
-  dmDevId     String     @map("dmdev_id")
-  dmDev       S5002DmDev @relation(fields: [dmDevId], references: [id])
-  tpInfoIR    String     @map("tp_info_ir")
-  valor       Decimal
-  descricao   String?
+  id                    String                    @id @default(cuid())
+
+  dmDevId               String                    @map("dmdev_id")
+  dmDev                 S5002DmDev               @relation(fields: [dmDevId], references: [id])
+
+  tpInfoIR              String                    @map("tp_info_ir")
+
+  valor                 Decimal                   @db.Decimal(14,2)
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  @@index([tpInfoIR])
 
   @@map("s5002_info_ir")
 }
 
-model S5002Totais {
-  id            String  @id @default(cuid())
-  s5002Id       String  @map("s5002_id")
-  s5002         S5002   @relation(fields: [s5002Id], references: [id])
-  codReceita    String  @map("cod_receita")
-  
-  vlrRendTrib      Decimal @default(0) @map("vlr_rend_trib")
-  vlrRendTrib13    Decimal @default(0) @map("vlr_rend_trib_13")
-  vlrPrevOficial   Decimal @default(0) @map("vlr_prev_oficial")
-  vlrPrevOficial13 Decimal @default(0) @map("vlr_prev_oficial_13")
-  vlrIrrf          Decimal @default(0) @map("vlr_irrf")
-  vlrIsento        Decimal @default(0) @map("vlr_isento")
+//////////////////////////////////////////////////////
+// TOTAL APURAÇÃO MENSAL
+//////////////////////////////////////////////////////
 
-  @@map("s5002_totais")
+model S5002TotApurMen {
+  id                    String                    @id @default(cuid())
+
+  dmDevId               String                    @map("dmdev_id")
+  dmDev                 S5002DmDev               @relation(fields: [dmDevId], references: [id])
+
+  crMen                 String?                   @map("cr_men")
+
+  vlrRendTrib           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib")
+
+  vlrRendTrib13         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib_13")
+
+  vlrPrevOficial        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial")
+
+  vlrPrevOficial13      Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial_13")
+
+  vlrCRMen              Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_crmen")
+
+  vlrCR13Men            Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_cr13men")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  @@map("s5002_tot_apur_men")
 }
 
-model DependenteMaster {
-  id            String   @id @default(cuid())
-  trabalhadorId String   @map("trabalhador_id")
-  trabalhador   Trabalhador @relation(fields: [trabalhadorId], references: [id])
-  
-  cpf           String   @unique
-  nome          String
-  dtNascimento  DateTime? @map("dt_nascimento")
-  createdAt     DateTime @default(now()) @map("created_at")
+//////////////////////////////////////////////////////
+// PERÍODOS ANTERIORES (2025-01 ... 2025-12)
+//////////////////////////////////////////////////////
 
-  linksS5002    S5002Dependente[]
-  planosSaude   S5002PlanoSaudeDep[]
+model S5002PeriodoAnterior {
+  id                    String                    @id @default(cuid())
+
+  s5002EventoId         String                    @map("s5002_evento_id")
+  s5002Evento           S5002Evento               @relation(fields: [s5002EventoId], references: [id])
+
+  perRefAjuste          String                    @map("per_ref_ajuste")
+
+  nrRec1210Orig         String?                   @map("nr_rec_1210_orig")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  dependentes           S5002PeriodoDependente[]
+  infoCR                S5002PeriodoInfoCR[]
+  planosSaude           S5002PeriodoPlanoSaude[]
+
+  @@index([perRefAjuste])
+
+  @@map("s5002_periodo_anterior")
+}
+
+//////////////////////////////////////////////////////
+// DEPENDENTES PERÍODO ANTERIOR
+//////////////////////////////////////////////////////
+
+model S5002PeriodoDependente {
+  id                    String                    @id @default(cuid())
+
+  periodoAnteriorId     String                    @map("periodo_anterior_id")
+  periodoAnterior       S5002PeriodoAnterior      @relation(fields: [periodoAnteriorId], references: [id])
+
+  dependenteId          String?                   @map("dependente_id")
+  dependente            DependenteMaster?         @relation(fields: [dependenteId], references: [id])
+
+  cpfDep                String?                   @map("cpf_dep")
+
+  depIRRF               Boolean                   @default(false) @map("dep_irrf")
+
+  tpDep                 String?                   @map("tp_dep")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  @@map("s5002_periodo_dependente")
+}
+
+//////////////////////////////////////////////////////
+// INFO CR
+//////////////////////////////////////////////////////
+
+model S5002PeriodoInfoCR {
+  id                    String                    @id @default(cuid())
+
+  periodoAnteriorId     String                    @map("periodo_anterior_id")
+  periodoAnterior       S5002PeriodoAnterior      @relation(fields: [periodoAnteriorId], references: [id])
+
+  tpCR                  String                    @map("tp_cr")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  deducoesDependente    S5002PeriodoDedDep[]
+  pensoes               S5002PeriodoPensao[]
+
+  @@map("s5002_periodo_info_cr")
+}
+
+//////////////////////////////////////////////////////
+// DEDUÇÕES DEPENDENTES
+//////////////////////////////////////////////////////
+
+model S5002PeriodoDedDep {
+  id                    String                    @id @default(cuid())
+
+  infoCRId              String                    @map("info_cr_id")
+  infoCR                S5002PeriodoInfoCR        @relation(fields: [infoCRId], references: [id])
+
+  dependenteId          String?                   @map("dependente_id")
+  dependente            DependenteMaster?         @relation(fields: [dependenteId], references: [id])
+
+  cpfDep                String?                   @map("cpf_dep")
+
+  tpRend                String                    @map("tp_rend")
+
+  vlrDedDep             Decimal                   @db.Decimal(14,2) @map("vlr_ded_dep")
+
+  @@map("s5002_periodo_ded_dep")
+}
+
+//////////////////////////////////////////////////////
+// PENSÃO
+//////////////////////////////////////////////////////
+
+model S5002PeriodoPensao {
+  id                    String                    @id @default(cuid())
+
+  infoCRId              String                    @map("info_cr_id")
+  infoCR                S5002PeriodoInfoCR        @relation(fields: [infoCRId], references: [id])
+
+  dependenteId          String?                   @map("dependente_id")
+  dependente            DependenteMaster?         @relation(fields: [dependenteId], references: [id])
+
+  cpfDep                String?                   @map("cpf_dep")
+
+  tpRend                String                    @map("tp_rend")
+
+  vlrDedPenAlim         Decimal                   @db.Decimal(14,2) @map("vlr_ded_pen_alim")
+
+  @@map("s5002_periodo_pensao")
+}
+
+//////////////////////////////////////////////////////
+// PLANO SAÚDE PERÍODO
+//////////////////////////////////////////////////////
+
+model S5002PeriodoPlanoSaude {
+  id                    String                    @id @default(cuid())
+
+  periodoAnteriorId     String                    @map("periodo_anterior_id")
+  periodoAnterior       S5002PeriodoAnterior      @relation(fields: [periodoAnteriorId], references: [id])
+
+  operadoraId           String?                   @map("operadora_id")
+  operadora             OperadoraSaude?           @relation(fields: [operadoraId], references: [id])
+
+  cnpjOper              String                    @map("cnpj_oper")
+
+  regANS                String?                   @map("reg_ans")
+
+  vlrSaudeTit           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_saude_tit")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  dependentes           S5002PeriodoPlanoSaudeDep[]
+
+  @@map("s5002_periodo_plano_saude")
+}
+
+//////////////////////////////////////////////////////
+// DEPENDENTES PLANO
+//////////////////////////////////////////////////////
+
+model S5002PeriodoPlanoSaudeDep {
+  id                    String                    @id @default(cuid())
+
+  planoSaudeId          String                    @map("plano_saude_id")
+  planoSaude            S5002PeriodoPlanoSaude    @relation(fields: [planoSaudeId], references: [id])
+
+  dependenteId          String?                   @map("dependente_id")
+  dependente            DependenteMaster?         @relation(fields: [dependenteId], references: [id])
+
+  cpfDep                String?                   @map("cpf_dep")
+
+  vlrSaudeDep           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_saude_dep")
+
+  @@map("s5002_periodo_plano_saude_dep")
+}
+
+//////////////////////////////////////////////////////
+// CONSOLIDADO OFICIAL DO PERÍODO
+//////////////////////////////////////////////////////
+
+model S5002ConsolidadoPeriodo {
+  id                    String                    @id @default(cuid())
+
+  empresaId             String                    @map("empresa_id")
+  empresa               Empresa                   @relation(fields: [empresaId], references: [id])
+
+  trabalhadorId         String?                   @map("trabalhador_id")
+  trabalhador           Trabalhador?              @relation(fields: [trabalhadorId], references: [id])
+
+  periodo               String                    @map("periodo")
+
+  eventoOrigemId        String                    @map("evento_origem_id")
+  eventoOrigem          EsocialEvento             @relation(fields: [eventoOrigemId], references: [id])
+
+  versao                Int                       @default(1)
+
+  ativo                 Boolean                   @default(true)
+
+  hashConsolidacao      String                    @map("hash_consolidacao")
+
+  tipoPeriodo           TipoPeriodo               @default(mensal) @map("tipo_periodo")
+
+  vlrRendTrib           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib")
+
+  vlrRendTrib13         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib_13")
+
+  vlrPrevOficial        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial")
+
+  vlrPrevOficial13      Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial_13")
+
+  vlrPensao             Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_pensao")
+
+  vlrPlanoSaude         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_plano_saude")
+
+  vlrDependentes        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_dependentes")
+
+  vlrIrrf               Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_irrf")
+
+  origemRetificacao     Boolean                   @default(false) @map("origem_retificacao")
+
+  processadoEm          DateTime                  @default(now()) @map("processado_em")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  @@unique([trabalhadorId, periodo, versao])
+
+  @@index([trabalhadorId, periodo, ativo])
+
+  @@map("s5002_consolidado_periodo")
+}
+
+//////////////////////////////////////////////////////
+// CONSOLIDADO ANUAL (DIRF)
+//////////////////////////////////////////////////////
+
+model S5002ConsolidadoAnual {
+  id                    String                    @id @default(cuid())
+
+  empresaId             String                    @map("empresa_id")
+  empresa               Empresa                   @relation(fields: [empresaId], references: [id])
+
+  trabalhadorId         String?                   @map("trabalhador_id")
+  trabalhador           Trabalhador?              @relation(fields: [trabalhadorId], references: [id])
+
+  ano                   Int
+
+  vlrRendTrib           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib")
+
+  vlrRendTrib13         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib_13")
+
+  vlrPrevOficial        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial")
+
+  vlrPensao             Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_pensao")
+
+  vlrPlanoSaude         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_plano_saude")
+
+  vlrDependentes        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_dependentes")
+
+  vlrIrrf               Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_irrf")
+
+  ultimaReprocessamento DateTime?                 @map("ultima_reprocessamento")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+
+  @@unique([trabalhadorId, ano])
+
+  @@map("s5002_consolidado_anual")
+}
+
+//////////////////////////////////////////////////////
+// DEPENDENTE MASTER
+//////////////////////////////////////////////////////
+
+model DependenteMaster {
+  id                    String                    @id @default(cuid())
+
+  trabalhadorId         String                    @map("trabalhador_id")
+  trabalhador           Trabalhador               @relation(fields: [trabalhadorId], references: [id])
+
+  cpf                   String
+
+  nome                  String
+
+  tpDependente          String?                   @map("tp_dependente")
+
+  deduzIrrf             Boolean                   @default(false) @map("deduz_irrf")
+
+  dtNascimento          DateTime?                 @map("dt_nascimento")
+
+  ativo                 Boolean                   @default(true)
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+
+  periodoDependentes    S5002PeriodoDependente[]
+  deducoesDependente    S5002PeriodoDedDep[]
+  pensoes               S5002PeriodoPensao[]
+  planosSaudeDep        S5002PeriodoPlanoSaudeDep[]
+
+  @@unique([trabalhadorId, cpf])
+
+  @@index([cpf])
 
   @@map("dependente_master")
 }
 
-model S5002Dependente {
-  id           String           @id @default(cuid())
-  s5002Id      String           @map("s5002_id")
-  s5002        S5002            @relation(fields: [s5002Id], references: [id])
-  dependenteId String           @map("dependente_id")
-  dependente   DependenteMaster @relation(fields: [dependenteId], references: [id])
-  
-  tpDep        String?          @map("tp_dep")
-  deduzIrrf    Boolean          @default(false) @map("deduz_irrf")
+//////////////////////////////////////////////////////
+// OPERADORA
+//////////////////////////////////////////////////////
 
-  @@map("s5002_dependentes")
+model OperadoraSaude {
+  id                    String                    @id @default(cuid())
+
+  cnpj                  String                    @unique
+
+  registroAns           String?                   @map("registro_ans")
+
+  nome                  String?
+
+  tipo                  TipoOperadora
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  planosSaudeAnteriores S5002PeriodoPlanoSaude[]
+
+  @@map("operadora_saude")
 }
 
-model S5002PlanoSaude {
-  id            String  @id @default(cuid())
-  s5002Id       String  @map("s5002_id")
-  s5002         S5002   @relation(fields: [s5002Id], references: [id])
-  
-  cnpjOperadora String  @map("cnpj_operadora")
-  registroAns   String? @map("registro_ans")
-  vlrTitular    Decimal @default(0) @map("vlr_titular")
-  
-  beneficarios S5002PlanoSaudeDep[]
+//////////////////////////////////////////////////////
+// CERTIFICADO DIGITAL
+//////////////////////////////////////////////////////
 
-  @@map("s5002_plano_saude")
+model CertificadoDigital {
+  id                    String                    @id @default(cuid())
+
+  empresaId             String                    @map("empresa_id")
+  empresa               Empresa                   @relation(fields: [empresaId], references: [id])
+
+  nome                  String
+  validade              DateTime
+  fingerprint           String?
+  senhaCriptografada    String                    @map("senha_criptografada")
+  storagePath           String                    @map("storage_path")
+
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+
+  @@map("certificado_digital")
 }
 
-model S5002PlanoSaudeDep {
-  id           String           @id @default(cuid())
-  planoSaudeId String           @map("plano_saude_id")
-  planoSaude   S5002PlanoSaude  @relation(fields: [planoSaudeId], references: [id])
-  dependenteId String           @map("dependente_id")
-  dependente   DependenteMaster @relation(fields: [dependenteId], references: [id])
-  
-  vlrDependente Decimal @default(0) @map("vlr_dependente")
+//////////////////////////////////////////////////////
+// CONTROLE DE DOWNLOAD
+//////////////////////////////////////////////////////
 
-  @@map("s5002_plano_saude_dep")
+model EsocialDownloadControle {
+  id                    String                    @id @default(cuid())
+  
+  cnpjRaiz              String                    @unique @map("cnpj_raiz")
+  
+  perApur               String                    @map("per_apur")
+  
+  dhUltimoEvtRetornado  String?                   @map("dh_ultimo_evt_retornado")
+  
+  status                String                    @default("ATIVO")
+  
+  totalBaixado          Int                       @default(0) @map("total_baixado")
+  
+  updatedAt             DateTime?                 @updatedAt @map("updated_at")
+
+  @@map("esocial_download_controle")
 }
+
+//////////////////////////////////////////////////////
+// TABELAS ESOCIAL
+//////////////////////////////////////////////////////
 
 model EsocialTabela01 {
   id          String    @id @default(cuid())
@@ -286,19 +871,16 @@ model EsocialTabela80 {
   @@map("esocial_tabela_80")
 }
 
-enum TipoOperadora {
-  medica
-  odonto
-  ambos
+model DivergenciaFiscal {
+  id           String                     @id @default(cuid())
+  eventoId     String?                    @map("evento_id")
+  evento       EsocialEvento?             @relation(fields: [eventoId], references: [id])
+  tipo         String
+  descricao    String
+  severidade   String                     // BAIXA, MEDIA, ALTA, CRITICA
+  resolvido    Boolean                    @default(false)
+  createdAt    DateTime                   @default(now()) @map("created_at")
+
+  @@map("divergencia_fiscal")
 }
 
-model OperadoraSaude {
-  id          String        @id @default(cuid())
-  cnpj        String        @unique
-  registroAns String?       @map("registro_ans")
-  nome        String?
-  tipo        TipoOperadora
-  createdAt   DateTime      @default(now()) @map("created_at")
-
-  @@map("operadora_saude")
-}

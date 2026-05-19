@@ -4,7 +4,7 @@ import { safeJson } from "@/lib/api-utils";
 
 export async function GET(req: NextRequest) {
   try {
-    const [t01, t03, t05, t21, t25, t54, t78, t80, logs, s5002Count, empresasCount, trabalhadoresCount] = await Promise.all([
+    const [t01, t03, t05, t21, t25, t54, t78, t80, logs, s5002Count, empresasCount, trabalhadoresCount, operadorasCount, fechamentosCount, divergenciasFiscaisCount, eventosComPeriodo] = await Promise.all([
       prisma.esocialTabela01.count(),
       prisma.esocialTabela03.count(),
       prisma.esocialTabela05.count(),
@@ -17,10 +17,26 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: "desc" },
         take: 20
       }),
-      prisma.s5002.count(),
+      prisma.esocialEvento.count({ where: { tpEvento: "S-5002" } }),
       prisma.empresa.count(),
-      prisma.trabalhador.count()
+      prisma.trabalhador.count(),
+      prisma.operadoraSaude.count(),
+      prisma.s5002ConsolidadoAnual.count(),
+      prisma.divergenciaFiscal.count({ where: { resolvido: false } }),
+      prisma.esocialEvento.findMany({
+        select: { perApur: true },
+        distinct: ['perApur'],
+        orderBy: { perApur: 'desc' },
+        take: 12
+      })
     ]);
+
+    const periodos = eventosComPeriodo.map(e => ({
+      id: e.perApur,
+      anoCalendario: parseInt(e.perApur.split('-')[0]),
+      mes: parseInt(e.perApur.split('-')[1]),
+      label: e.perApur
+    }));
 
     // Processamento Batch (Últimas 24h)
     const twentyFourHoursAgo = new Date();
@@ -35,27 +51,16 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Auditoria (Divergências)
-    const auditResults = await prisma.s5002Totais.findMany({
-      select: {
-        vlrRendTrib: true,
-        vlrPrevOficial: true,
-        vlrIrrf: true
-      }
-    });
-
-    const divergenciasIrrf = auditResults.filter(t => {
-       const basePropria = Number(t.vlrRendTrib) - Number(t.vlrPrevOficial);
-       return Number(t.vlrIrrf) > 0 && basePropria <= 0;
-    }).length;
-
     const responseData = {
       rubricasMapeadas: t54,
-      divergenciasIrrf: divergenciasIrrf || 0,
+      divergenciasIrrf: divergenciasFiscaisCount || 0,
       batchTotal: batchStats._sum.processed || 0,
       s5002Total: s5002Count,
       empresasTotal: empresasCount,
       trabalhadoresTotal: trabalhadoresCount,
+      operadorasTotal: operadorasCount,
+      fechamentosTotal: fechamentosCount,
+      periodos,
       tabelas: {
         t01, t03, t05, t21, t25, t54, t78, t80
       },

@@ -10,43 +10,64 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Campos obrigatórios ausentes" }, { status: 400 });
     }
 
-    const s5002 = await prisma.s5002.findFirst({
+    const evento = await prisma.esocialEvento.findFirst({
       where: {
         OR: [
           { id: idEvento },
-          { nrRecibo: idEvento }
+          { nrRecibo: idEvento },
+          { eventoId: idEvento }
         ]
-      }
+      },
+      include: { s5002: true }
     });
 
-    if (!s5002) {
+    if (!evento || !evento.s5002) {
       return NextResponse.json({ 
         error: "Evento S-5002 não encontrado. Importe o XML primeiro." 
       }, { status: 404 });
     }
 
-    const benefit = await prisma.s5002PlanoSaude.create({
-      data: {
-        s5002Id: s5002.id,
-        cnpjOperadora,
-        registroAns: regAns,
-        vlrTitular: parseFloat(valor),
+    // No novo schema, planos de saúde estão sob S5002PeriodoAnterior
+    // Criamos um registro de período anterior como container se não existir para o próprio perApur
+    let periodoAnterior = await prisma.s5002PeriodoAnterior.findFirst({
+      where: {
+        s5002EventoId: evento.s5002.id,
+        perRefAjuste: evento.perApur
       }
     });
 
-    // Serialize Decimals for JSON response
-    const serializedBenefit = JSON.parse(JSON.stringify(benefit, (key, value) =>
-      typeof value === 'object' && value !== null && value.constructor.name === 'Decimal'
-        ? value.toString()
-        : value
-    ));
+    if (!periodoAnterior) {
+      periodoAnterior = await prisma.s5002PeriodoAnterior.create({
+        data: {
+          s5002EventoId: evento.s5002.id,
+          perRefAjuste: evento.perApur
+        }
+      });
+    }
+
+    const benefit = await prisma.s5002PeriodoPlanoSaude.create({
+      data: {
+        periodoAnteriorId: periodoAnterior.id,
+        cnpjOper: cnpjOperadora.replace(/\D/g, ""),
+        regANS: regAns,
+        vlrSaudeTit: parseFloat(valor),
+      }
+    });
+
+    // Serializar Decimais
+    const serializedBenefit = JSON.parse(JSON.stringify(benefit, (key, value) => {
+       if (typeof value === 'object' && value !== null && value.constructor && value.constructor.name === 'Decimal') {
+         return value.toString();
+       }
+       return value;
+    }));
 
     return NextResponse.json({ success: true, data: serializedBenefit });
   } catch (error: any) {
-    console.error("Erro ao salvar benefício:", error);
+    console.error("Erro ao salvar benefício refatorado:", error);
     return NextResponse.json({ 
       error: "Erro interno ao salvar benefício", 
-      details: error.message || "Erro desconhecido" 
+      details: error.message 
     }, { status: 500 });
   }
 }

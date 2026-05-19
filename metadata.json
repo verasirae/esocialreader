@@ -1,0 +1,5 @@
+{
+  "name": "eSocial S-5002 Fiscal Auditor",
+  "description": "Uma solução robusta para leitura, consolidação fiscal e auditoria de eventos S-5002 do eSocial, com foco em DIRF Digital e IRRF.",
+  "requestFramePermissions": []
+}

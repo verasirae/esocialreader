@@ -11,9 +11,11 @@ import {
   FileText, 
   History, 
   ShieldCheck, 
+  AlertTriangle,
   UserCog, 
   Settings, 
-  HelpCircle
+  HelpCircle,
+  Calendar
  } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
@@ -21,11 +23,14 @@ import { Plus, UserPlus, ShieldPlus } from "lucide-react";
 
 const menuItems = [
   { icon: Grid2X2, label: "Dashboard", href: "/" },
-  { icon: FileText, label: "Auditoria e Tabelas", href: "/esocial" },
-  { icon: Stethoscope, label: "Operadoras de Saúde", href: "/health-operators" },
-  { icon: FileText, label: "Informe de Rendimentos", href: "/reports" },
+  { icon: Building2, label: "Empregadores", href: "/empregadores" },
+  { icon: Users, label: "Trabalhadores", href: "/trabalhadores" },
+  { icon: Stethoscope, label: "Operadoras de Saúde", href: "/operadoras" },
+  { icon: ShieldCheck, label: "Consolidação Fiscal", href: "/consolidacao" },
+  { icon: AlertTriangle, label: "Pendências", href: "/pendencias" },
   { icon: History, label: "Histórico de XML", href: "/history" },
-  { icon: ShieldCheck, label: "Auditoria Fiscal", href: "/audit" },
+  { icon: ShieldCheck, label: "Auditoria e Timeline", href: "/audit" },
+  { icon: FileText, label: "DIRF Digital", href: "/reports" },
 ];
 
 const footerItems = [

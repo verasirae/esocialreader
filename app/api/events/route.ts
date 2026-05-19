@@ -1,49 +1,69 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeJson } from "@/lib/api-utils";
 
 export async function GET() {
   try {
-    const events = await prisma.s5002.findMany({
+    // Buscar eventos ativos
+    const events = await prisma.esocialEvento.findMany({
+      where: {
+        ativo: true,
+        tpEvento: "S-5002"
+      },
       include: {
         trabalhador: true,
-        demonstrativos: {
+        empresa: true,
+        s5002: {
           include: {
-            infoIris: true
+            demonstrativos: {
+              include: {
+                infoIR: true,
+                totais: true
+              }
+            }
           }
-        },
-        totais: true,
+        }
       },
       orderBy: {
-        createdAt: "desc",
+        perApur: "desc",
       },
-      take: 20,
+      take: 50,
     });
     
-    // Enrich with audit logic for the legacy dashboard
-    const auditedEvents = events.map(event => {
+    // Enriquecer com lógica de auditoria baseada no novo schema
+    const auditedEvents = events.map(evt => {
       let calcBase = 0;
       let xmlBase = 0;
       
-      // Calculate base from infoIris
-      event.demonstrativos.forEach(dm => {
-        dm.infoIris.forEach(ir => {
-          const valor = Number(ir.valor);
-          // 11, 12, 13 are taxable
-          if (["11", "12", "13"].includes(ir.tpInfoIR)) {
-            calcBase += valor;
-          } else if (["41", "42", "43", "44", "46", "47", "51", "52", "53", "54", "55", "67"].includes(ir.tpInfoIR)) {
-            calcBase -= valor;
+      const s5002 = evt.s5002;
+      const trabalhador = evt.trabalhador || { cpf: "N/A", nome: "Não encontrado" };
+      
+      if (s5002 && s5002.demonstrativos) {
+        s5002.demonstrativos.forEach(dm => {
+          if (dm.infoIR) {
+            dm.infoIR.forEach(ir => {
+              const valor = Number(ir.valor || 0);
+              const tp = ir.tpInfoIR;
+              if (["11", "12", "13"].includes(tp)) {
+                calcBase += valor;
+              } else if (["41", "42", "43", "44", "46", "47", "51", "52", "53", "54", "55", "67"].includes(tp)) {
+                calcBase -= valor;
+              }
+            });
+          }
+
+          if (dm.totais) {
+            dm.totais.forEach(tot => {
+              xmlBase += Number(tot.vlrRendTrib || 0) + Number(tot.vlrRendTrib13 || 0);
+            });
           }
         });
-      });
-
-      // XML Base from Totais (codReceita 056107 or 058806)
-      const totalRec = event.totais.find(t => t.codReceita === "056107" || t.codReceita === "058806");
-      xmlBase = Number(totalRec?.vlrRendTrib || 0);
+      }
 
       return {
-        ...event,
-        // Mock the old baseIR structure for the UI to not break
+        ...evt,
+        trabalhador, // Garantir que trabalhador exista para o frontend
+        competencia: evt.perApur,
         baseIR: {
           baseCalculada: calcBase,
           baseXml: xmlBase,
@@ -52,20 +72,21 @@ export async function GET() {
       };
     });
 
-    // Safely transform Decimals to strings for JSON serialization
-    const serializedEvents = JSON.parse(JSON.stringify(auditedEvents, (key, value) =>
-      typeof value === 'object' && value !== null && value.constructor.name === 'Decimal'
-        ? value.toString()
-        : value
-    ));
-
-    return NextResponse.json(serializedEvents);
+    return safeJson(auditedEvents);
   } catch (error: any) {
-    console.error("Erro ao buscar eventos [PRISMA ERROR]:", error);
-    return NextResponse.json({ 
-      error: "Erro ao buscar eventos", 
+    console.error("Erro ao buscar eventos refatorados:", error);
+    
+    // Extrair mais detalhes da falha do Prisma se disponíveis
+    const errorDetails = {
+      message: error.message,
       code: error.code,
-      details: error.message || "Erro desconhecido",
-    }, { status: 500 });
+      meta: error.meta,
+      clientVersion: error.clientVersion
+    };
+
+    return safeJson({ 
+      error: "Erro ao buscar eventos", 
+      details: errorDetails
+    }, 500);
   }
 }

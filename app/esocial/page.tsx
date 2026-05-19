@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
+import { motion } from "motion/react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { 
   Search, 
   Download, 
@@ -19,156 +22,198 @@ import {
   TrendingUp,
   CloudUpload,
   Loader2,
-  FileText
+  FileText,
+  AlertCircle,
+  X,
+  CheckCheck,
+  Calendar
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, safeJsonFetch } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
 
 const tableCards = [
-  { id: "01", icon: Users, label: "Tabela 01", sub: "Categorias de Trabalhadores", type: "OFICIAL", lastUpdate: "12/05/2024" },
-  { id: "03", icon: BookOpen, label: "Tabela 03", sub: "Natureza de Rubricas", type: "OFICIAL", lastUpdate: "10/06/2024", active: true },
-  { id: "05", icon: FileText, label: "Tabela 05", sub: "Tipos de Inscrição", type: "OFICIAL", lastUpdate: "10/06/2024" },
-  { id: "21", icon: ShieldCheck, label: "Tabela 21", sub: "Código de Incidência Tributária", type: "OFICIAL", lastUpdate: "15/01/2024" },
-  { id: "25", icon: BookOpen, label: "Tabela 25", sub: "Tipos de Benefícios", type: "OFICIAL", lastUpdate: "15/01/2024" },
-  { id: "78", icon: ShieldCheck, label: "Tabela 78", sub: "Tipos de Dependentes", type: "OFICIAL", lastUpdate: "15/01/2024" },
-  { id: "80", icon: Settings2, label: "Tabela 80", sub: "Naturezas Jurídicas", type: "OFICIAL", lastUpdate: "15/01/2024" },
-  { id: "54", icon: Settings2, label: "Tabela 54", sub: "Regras de Validação", type: "CONFIG", lastUpdate: "02/06/2024" },
+  { id: "01", icon: Users, label: "Tabela 01", sub: "Categorias de Trabalhadores - eSocial", type: "OFICIAL", lastUpdate: "12/05/2024" },
+  { id: "03", icon: BookOpen, label: "Tabela 03", sub: "Tabela de Natureza das Rubricas da Folha de Pagamento - eSocial", type: "OFICIAL", lastUpdate: "10/06/2024", active: true },
+  { id: "05", icon: FileText, label: "Tabela 05", sub: "Tipos de Inscrição - eSocial", type: "OFICIAL", lastUpdate: "10/06/2024" },
+  { id: "21", icon: ShieldCheck, label: "Tabela 21", sub: "Códigos de Incidência Tributária da Rubrica para IRRF", type: "OFICIAL", lastUpdate: "15/01/2024" },
+  { id: "25", icon: BookOpen, label: "Tabela 25", sub: "Tipos de Dependente - eSocial", type: "OFICIAL", lastUpdate: "15/01/2024" },
+  { id: "54", icon: Settings2, label: "Tabela 54", sub: "Tabela de Rubricas do eSocial", type: "CONFIG", lastUpdate: "02/06/2024" },
+  { id: "78", icon: ShieldCheck, label: "Tabela 78", sub: "Tabela de Código de Receita - Totalizadores - eSocial", type: "OFICIAL", lastUpdate: "15/01/2024" },
+  { id: "80", icon: Settings2, label: "Tabela 80", sub: "Tabela de Tipo de Valor de Imposto de Renda - Totalizadores - eSocial", type: "OFICIAL", lastUpdate: "15/01/2024" },
 ];
 
 export default function EsocialTablesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>}>
+      <EsocialTablesContent />
+    </Suspense>
+  );
+}
+
+function EsocialTablesContent() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState("Auditoria S-5002");
+  
+  // Novas variáveis para Conferência
+  const [conferenciaData, setConferenciaData] = useState<any[]>([]);
+  const [dependentesConferencia, setDependentesConferencia] = useState<any[]>([]);
+  const [selectedTrabalhador, setSelectedTrabalhador] = useState("");
+  const [selectedAno, setSelectedAno] = useState(new Date().getFullYear().toString());
+  const [periodosDisponiveis, setPeriodosDisponiveis] = useState<any[]>([]);
+
+  // Variáveis originais restauradas
   const [selectedTable, setSelectedTable] = useState("03");
+  const [trabalhadoresList, setTrabalhadoresList] = useState<any[]>([]);
   const [tableData, setTableData] = useState<any[]>([]);
   const [auditData, setAuditData] = useState<any[]>([]);
+  const [fechamentosData, setFechamentosData] = useState<any[]>([]);
+  const [selectedPeriodo, setSelectedPeriodo] = useState<string>("");
+  const [isConsolidating, setIsConsolidating] = useState(false);
   const [empresasData, setEmpresasData] = useState<any[]>([]);
   const [trabalhadoresData, setTrabalhadoresData] = useState<any[]>([]);
+  const [operadorasData, setOperadorasData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [importFiles, setImportFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadResults, setUploadResults] = useState<{ processed: number; errors: number; errorDetails?: any[] } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [stats, setStats] = useState<any>(null);
   const [groupFilter, setGroupFilter] = useState("");
+  const [isParamsProcessed, setIsParamsProcessed] = useState(false);
 
-  const { openRegisterEmpresaModal, openRegisterTrabalhadorModal } = useModals();
+  const { openRegisterEmpresaModal, openRegisterTrabalhadorModal, openRegisterOperadoraModal } = useModals();
 
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [selectedRowDetail, setSelectedRowDetail] = useState<any>(null);
 
   useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    const anoParam = searchParams.get("ano");
+
+    if (tabParam) setActiveTab(tabParam);
+    if (anoParam) setSelectedAno(anoParam);
+    
+    setIsParamsProcessed(true);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!isParamsProcessed) return;
     fetchStats();
-  }, []);
+    fetchPeriodos();
+    fetchTrabalhadoresList();
+  }, [isParamsProcessed]);
 
-  useEffect(() => {
-    const handleEmpresaRefresh = () => {
-      fetchStats();
-      if (activeTab === "Empregadores") {
-        fetchEmpresasData(1, "");
-      }
-    };
-    const handleTrabalhadorRefresh = () => {
-      fetchStats();
-      if (activeTab === "Trabalhadores") {
-        fetchTrabalhadoresData(1, "");
-      }
-    };
-    window.addEventListener("empresa-added", handleEmpresaRefresh);
-    window.addEventListener("trabalhador-added", handleTrabalhadorRefresh);
-    return () => {
-      window.removeEventListener("empresa-added", handleEmpresaRefresh);
-      window.removeEventListener("trabalhador-added", handleTrabalhadorRefresh);
-    };
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab === "Auditoria S-5002") {
-      fetchAuditData(currentPage, searchTerm);
-    } else if (activeTab === "Empregadores") {
-      fetchEmpresasData(currentPage, searchTerm);
-    } else if (activeTab === "Trabalhadores") {
-      fetchTrabalhadoresData(currentPage, searchTerm);
-    } else {
-      fetchTableData(currentPage, searchTerm, groupFilter);
-    }
-  }, [selectedTable, searchTerm, groupFilter, activeTab, currentPage]);
-
-  const fetchStats = async () => {
+  const fetchTrabalhadoresList = async () => {
     try {
-      const res = await fetch("/api/esocial/stats");
-      if (!res.ok) throw new Error("Erro ao carregar estatísticas");
-      const data = await res.json();
-      setStats(data);
+      const data = await safeJsonFetch("/api/esocial/trabalhadores?limit=1000");
+      if (data && data.data) setTrabalhadoresList(data.data);
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const fetchPeriodos = async () => {
+    try {
+      const data = await safeJsonFetch("/api/esocial/periodos");
+      if (data) setPeriodosDisponiveis(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchConferencia = async () => {
+    if (!selectedTrabalhador || !selectedAno) return;
+    setIsLoading(true);
+    try {
+      const data = await safeJsonFetch(`/api/esocial/s5002/conferencia?trabalhadorId=${selectedTrabalhador}&ano=${selectedAno}`);
+      if (data) {
+        setConferenciaData(data.resumo || []);
+        setDependentesConferencia(data.dependentes || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "Conferência DIRF") {
+      fetchConferencia();
+    }
+  }, [selectedTrabalhador, selectedAno, activeTab]);
+
+  const handleRefreshAudit = async () => {
+    setIsLoading(true);
+    const data = await safeJsonFetch("/api/esocial/s5002/audit-refresh", { method: "POST" });
+    if (data && data.success) {
+      alert("Auditoria atualizada com sucesso!");
+      fetchAuditData(currentPage, searchTerm);
+    } else {
+      alert("Falha ao atualizar auditoria.");
+    }
+    setIsLoading(false);
+  };
+
+  const fetchStats = async () => {
+    const data = await safeJsonFetch("/api/esocial/stats");
+    if (data) setStats(data);
   };
 
   const fetchAuditData = async (page: number, search: string) => {
     setIsLoading(true);
-    try {
-      const res = await fetch(`/api/esocial/s5002/list?page=${page}&search=${search}`);
-      if (!res.ok) throw new Error("Erro ao carregar auditorias");
-      const result = await res.json();
-      if (result.data) {
-        setAuditData(result.data);
-        setTotalItems(result.total);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
+    const result = await safeJsonFetch(`/api/esocial/s5002/list?page=${page}&search=${encodeURIComponent(search)}&ano=${selectedAno}`);
+    if (result && result.data) {
+      setAuditData(result.data);
+      setTotalItems(result.total);
     }
+    setIsLoading(false);
+  };
+
+  const fetchFechamentos = async () => {
+    setIsLoading(true);
+    const data = await safeJsonFetch("/api/esocial/s5002/fechamentos/list");
+    if (data) setFechamentosData(data);
+    setIsLoading(false);
+  };
+
+  const handleConsolidation = async () => {
+    if (!selectedPeriodo) {
+      alert("Selecione um período fiscal primeiro.");
+      return;
+    }
+    
+    setIsConsolidating(true);
+    const data = await safeJsonFetch("/api/esocial/s5002/consolidate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        ano: selectedPeriodo.split('-')[0],
+        empresaId: stats?.empresasData?.[0]?.id || "" // Fallback if no specific selection
+      })
+    });
+    
+    if (data && data.success) {
+      alert(`Consolidação concluída para ${data.processed} trabalhadores.`);
+      fetchFechamentos();
+      fetchStats();
+    } else {
+      alert("Erro na consolidação: " + (data?.error || "Erro desconhecido"));
+    }
+    setIsConsolidating(false);
   };
 
   const fetchTableData = async (page: number, search: string, group: string = "") => {
     setIsLoading(true);
-    try {
-      const res = await fetch(`/api/esocial/tables/${selectedTable}?page=${page}&search=${search}&group=${group}`);
-      if (!res.ok) throw new Error("Erro ao carregar dados da tabela");
-      const result = await res.json();
-      if (result.data) {
-        setTableData(result.data);
-        setTotalItems(result.total);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
+    const result = await safeJsonFetch(`/api/esocial/tables/${selectedTable}?page=${page}&search=${encodeURIComponent(search)}&group=${group}`);
+    if (result && result.data) {
+      setTableData(result.data);
+      setTotalItems(result.total);
     }
-  };
-
-  const fetchEmpresasData = async (page: number, search: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/esocial/empresas?page=${page}&search=${search}`);
-      if (!res.ok) throw new Error("Erro ao carregar empresas");
-      const result = await res.json();
-      if (result.data) {
-        setEmpresasData(result.data);
-        setTotalItems(result.total);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchTrabalhadoresData = async (page: number, search: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/esocial/trabalhadores?page=${page}&search=${search}`);
-      if (!res.ok) throw new Error("Erro ao carregar trabalhadores");
-      const result = await res.json();
-      if (result.data) {
-        setTrabalhadoresData(result.data);
-        setTotalItems(result.total);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+    setIsLoading(false);
   };
 
   const handleS5002Upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -176,36 +221,31 @@ export default function EsocialTablesPage() {
     if (!files || files.length === 0) return;
     
     setIsUploading(true);
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-      formData.append("files", files[i]);
-    }
+    let successFiles = 0;
+    let errorFiles = 0;
 
     try {
-      const res = await fetch("/api/esocial/s5002/import", {
-        method: "POST",
-        body: formData,
-      });
-      
-      const contentType = res.headers.get("content-type");
-      let data;
-      if (contentType && contentType.includes("application/json")) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        throw new Error("Resposta inesperada do servidor: " + (text.substring(0, 100) || "Sem conteúdo"));
-      }
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append("files", files[i]);
+        
+        const data = await safeJsonFetch("/api/esocial/s5002/import", {
+          method: "POST",
+          body: formData,
+        });
 
-      if (data.success) {
-        alert(`Auditoria Concluída! Processados: ${data.processed}, Erros: ${data.errors}`);
-        fetchAuditData(1, searchTerm);
-        fetchStats();
-        setActiveTab("Auditoria S-5002");
-      } else {
-        throw new Error(data.error || "Erro na importação");
+        if (data && data.success) {
+          successFiles++;
+        } else {
+          errorFiles++;
+        }
       }
+      
+      alert(`Processamento de Upload Concluído!\nSucesso: ${successFiles}\nErros: ${errorFiles}`);
+      fetchAuditData(1, searchTerm);
+      fetchStats();
     } catch (err: any) {
-      alert("Erro ao auditar arquivos: " + err.message);
+      alert("Falha na Auditoração: " + err.message);
     } finally {
       setIsUploading(false);
       if (e.target) e.target.value = "";
@@ -222,26 +262,17 @@ export default function EsocialTablesPage() {
     formData.append("tableId", tableId);
 
     try {
-      const res = await fetch("/api/esocial/import", {
+      const data = await safeJsonFetch("/api/esocial/import", {
         method: "POST",
         body: formData,
       });
       
-      const contentType = res.headers.get("content-type");
-      let data;
-      if (contentType && contentType.includes("application/json")) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        throw new Error("Resposta inesperada do servidor: " + (text.substring(0, 100) || "Sem conteúdo"));
-      }
-
-      if (data.success) {
+      if (data && data.success) {
         alert(`Sucesso! Processados: ${data.processed}, Erros: ${data.errors}`);
         fetchTableData(currentPage, searchTerm);
         fetchStats();
       } else {
-        throw new Error(data.error || "Erro na importação");
+        alert("Erro ao importar arquivo: " + (data?.error || "Falha na resposta"));
       }
     } catch (err: any) {
       alert("Erro ao importar arquivo: " + err.message);
@@ -313,12 +344,10 @@ export default function EsocialTablesPage() {
             >
               Fechar Detalhamento
             </button>
-            {(activeTab === "Empregadores" || activeTab === "Trabalhadores") && (
+            {(activeTab === "Auditoria S-5002") && (
               <button 
                 className="btn-outline px-6 bg-white border-primary/20 text-primary hover:bg-primary/5 flex items-center justify-center gap-2"
                 onClick={() => {
-                  if (activeTab === "Empregadores") openRegisterEmpresaModal(selectedRowDetail);
-                  if (activeTab === "Trabalhadores") openRegisterTrabalhadorModal(selectedRowDetail);
                   setIsDataModalOpen(false);
                 }}
               >
@@ -332,162 +361,911 @@ export default function EsocialTablesPage() {
     );
   };
 
-  const renderContent = () => {
-    if (activeTab === "Empregadores") {
-      return (
-        <div className="card flex flex-col">
-          <div className="px-lg py-6 border-b border-outline-variant flex justify-between items-center bg-white">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-primary/10 rounded-sm flex items-center justify-center text-primary">
-                <Settings2 size={20} />
-              </div>
-              <div>
-                <h2 className="text-base font-extrabold text-on-surface tracking-tight">Base de Empregadores</h2>
-                <p className="text-[11px] text-secondary font-medium">Gestão de CNPJs e filiais identificadas nos eventos</p>
-              </div>
+
+  const [divergenciasData, setDivergenciasData] = useState<any[]>([]);
+  const [divergenciasStats, setDivergenciasStats] = useState<any>(null);
+  const [severidadeFilter, setSeveridadeFilter] = useState("");
+  const [tipoFilter, setTipoFilter] = useState("");
+
+  useEffect(() => {
+    if (activeTab === "Auditoria S-5002") {
+      fetchAuditData(currentPage, searchTerm);
+    } else if (activeTab === "Consolidação Anual") {
+      fetchFechamentos();
+    } else if (activeTab === "Divergências Fiscais") {
+      fetchDivergencias(severidadeFilter, tipoFilter);
+    } else if (activeTab === "Importar XML") {
+      // No initial data fetch needed
+    } else {
+      fetchTableData(currentPage, searchTerm, groupFilter);
+    }
+  }, [activeTab, currentPage, searchTerm, groupFilter, severidadeFilter, tipoFilter, selectedTable, selectedAno]);
+
+  const fetchDivergencias = async (sev: string = "", tip: string = "") => {
+    setIsLoading(true);
+    try {
+      const encodedSearch = encodeURIComponent(searchTerm || "");
+      let url = `/api/esocial/divergencias?resolved=false&search=${encodedSearch}`;
+      if (sev) url += `&severidade=${sev}`;
+      if (tip) url += `&tipo=${tip}`;
+      
+      const [data, statsData] = await Promise.all([
+        safeJsonFetch(url),
+        safeJsonFetch("/api/esocial/divergencias/stats")
+      ]);
+      
+      setDivergenciasData(Array.isArray(data) ? data : []);
+      setDivergenciasStats(statsData);
+    } catch (err) {
+      console.error("Erro ao buscar divergências:", err);
+      setDivergenciasData([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resolveDivergencia = async (id: string, resolvido: boolean) => {
+     try {
+       await safeJsonFetch("/api/esocial/divergencias", {
+         method: "PATCH",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({ id, resolvido })
+       });
+       fetchDivergencias(severidadeFilter, tipoFilter);
+       fetchStats();
+     } catch (err) {
+       console.error(err);
+     }
+  };
+
+  const [selectedFechamento, setSelectedFechamento] = useState<any>(null);
+  const [showInformeModal, setShowInformeModal] = useState(false);
+
+  const renderInformeModal = () => {
+    if (!selectedFechamento) return null;
+    const f = selectedFechamento;
+
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-on-surface/60 backdrop-blur-sm p-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-sm shadow-2xl flex flex-col"
+        >
+          <div className="p-8 border-b border-outline-variant flex justify-between items-start bg-surface/30">
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Comprovante de Rendimentos Pagos e de Retenção de Imposto de Renda na Fonte</span>
+              <h3 className="text-xl font-extrabold text-on-surface">Ano-calendário de {f.ano}</h3>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary" size={14} />
-                <input 
-                  type="text"
-                  placeholder="Buscar por CNPJ..."
-                  className="pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded-sm text-xs focus:ring-1 focus:ring-primary outline-none transition-all w-64"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            <button onClick={() => setShowInformeModal(false)} className="p-2 hover:bg-surface-variant rounded-full transition-all">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="p-8 space-y-8">
+            {/* Quadrante 1: Fonte Pagadora */}
+            <section className="space-y-4">
+              <h4 className="text-[11px] font-black text-secondary uppercase tracking-widest border-b border-outline-variant pb-2">01. Fonte Pagadora (Pessoa Jurídica)</h4>
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-[10px] text-secondary font-bold uppercase mb-1">CNPJ</p>
+                  <p className="text-sm font-black text-on-surface">{f.empresa.cnpjRaiz}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] text-secondary font-bold uppercase mb-1">Nome Empresarial</p>
+                  <p className="text-sm font-black text-on-surface">{f.empresa.razaoSocial}</p>
+                </div>
               </div>
-              <button 
-                className="btn-primary flex items-center gap-2 py-2"
-                onClick={() => openRegisterEmpresaModal()}
-              >
-                <Plus size={14} />
-                <span>Novo Empregador</span>
+            </section>
+
+            {/* Quadrante 2: Pessoa Física Beneficiária */}
+            <section className="space-y-4">
+              <h4 className="text-[11px] font-black text-secondary uppercase tracking-widest border-b border-outline-variant pb-2">02. Pessoa Física Beneficiária dos Rendimentos</h4>
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-[10px] text-secondary font-bold uppercase mb-1">CPF</p>
+                  <p className="text-sm font-black text-on-surface">{f.trabalhador.cpf}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] text-secondary font-bold uppercase mb-1">Nome Completo</p>
+                  <p className="text-sm font-black text-on-surface">{f.trabalhador.nome}</p>
+                </div>
+              </div>
+            </section>
+
+            {/* Quadrante 3: Rendimentos Tributáveis */}
+            <section className="space-y-4">
+              <h4 className="text-[11px] font-black text-secondary uppercase tracking-widest border-b border-outline-variant pb-2">03. Rendimentos Tributáveis, Deduções e Imposto Retido na Fonte</h4>
+              <div className="space-y-2 border border-outline-variant rounded-sm overflow-hidden">
+                <div className="flex justify-between p-3 bg-surface/50 border-b border-outline-variant italic">
+                  <span className="text-xs font-bold">Natureza do Rendimento</span>
+                  <span className="text-xs font-black">Valores em Reais (R$)</span>
+                </div>
+                {[
+                  { label: "Total de Rendimentos (inclusive férias)", val: f.totalRendTrib },
+                  { label: "Contribuição Previdenciária Oficial", val: f.totalPrevOficial },
+                  { label: "Pensão Alimentícia", val: f.totalPensao },
+                  { label: "Imposto sobre a Renda Retido na Fonte", val: f.totalIrrf },
+                ].map((item, i) => (
+                  <div key={i} className="flex justify-between p-3 border-b border-outline-variant last:border-0 hover:bg-surface/20 transition-all">
+                    <span className="text-xs font-medium text-secondary">{item.label}</span>
+                    <span className="text-xs font-black text-on-surface">R$ {Number(item.val).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+             {/* Quadrante 4: Rendimentos Isentos */}
+             <section className="space-y-4">
+              <h4 className="text-[11px] font-black text-secondary uppercase tracking-widest border-b border-outline-variant pb-2">04. Rendimentos Isentos e Não Tributáveis</h4>
+              <div className="space-y-2 border border-outline-variant rounded-sm overflow-hidden">
+                <div className="flex justify-between p-3 border-b border-outline-variant hover:bg-surface/20 transition-all">
+                  <span className="text-xs font-medium text-secondary">Indenizações por rescisão de contrato de trabalho</span>
+                  <span className="text-xs font-black text-on-surface">R$ {Number(f.totalIndenizacaoRescisao).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between p-3 hover:bg-surface/20 transition-all">
+                  <span className="text-xs font-medium text-secondary">Outros Rendimentos Isentos</span>
+                  <span className="text-xs font-black text-on-surface">R$ {(Number(f.totalRendIsentos) - Number(f.totalIndenizacaoRescisao)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div className="p-8 border-t border-outline-variant bg-surface/30 flex justify-between gap-4">
+            <p className="text-[10px] text-secondary font-medium leading-relaxed italic max-w-sm">
+              * Este documento foi gerado automaticamente através da consolidação dos eventos S-5002 transmitidos ao eSocial.
+            </p>
+            <div className="flex gap-4">
+              <button className="btn-outline flex items-center gap-2 py-2.5 px-6">
+                <Download size={14} />
+                <span>Baixar PDF</span>
               </button>
+              <button onClick={() => setShowInformeModal(false)} className="btn-primary py-2.5 px-8">Fechar</button>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-surface text-[10px] font-black text-secondary uppercase tracking-widest">
-                  <th className="px-lg py-4 border-b border-outline-variant">CNPJ Raiz</th>
-                  <th className="px-lg py-4 border-b border-outline-variant">Razão Social</th>
-                  <th className="px-lg py-4 border-b border-outline-variant">CNPJ Completo</th>
-                  <th className="px-lg py-4 border-b border-outline-variant text-center">Eventos Processados</th>
-                  <th className="px-lg py-4 border-b border-outline-variant text-center">Data Cadastro</th>
-                  <th className="px-lg py-4 border-b border-outline-variant text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-outline-variant">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={6} className="px-lg py-20 text-center"><Loader2 size={32} className="animate-spin text-primary inline-block opacity-20" /></td>
-                  </tr>
-                ) : empresasData.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-lg py-32 text-center text-xs text-secondary italic font-bold">Nenhuma empresa encontrada.</td>
-                  </tr>
-                ) : (
-                  empresasData.map((empresa: any) => (
-                    <tr key={empresa.id} className="hover:bg-surface-container/30 transition-all">
-                      <td className="px-lg py-5 text-sm font-black text-primary">{empresa.cnpjRaiz}</td>
-                      <td className="px-lg py-5 text-sm font-bold text-on-surface uppercase">{empresa.razaoSocial}</td>
-                      <td className="px-lg py-5 text-sm text-secondary font-medium">{empresa.cnpjCompleto}</td>
-                      <td className="px-lg py-5 text-sm font-black text-on-surface text-center tabular-nums">
-                        {empresa._count?.eventos || 0}
-                      </td>
-                      <td className="px-lg py-5 text-sm text-secondary text-center">
-                        {new Date(empresa.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-lg py-5 text-right flex justify-end gap-2">
-                         <button className="p-2 hover:bg-white border border-outline-variant rounded transition-all" onClick={() => openDetails(empresa)} title="Ver detalhes">
-                            <Eye size={14} className="text-secondary" />
-                         </button>
-                         <button className="p-2 hover:bg-white border border-primary/20 rounded transition-all" onClick={() => openRegisterEmpresaModal(empresa)} title="Editar">
-                            <Pencil size={14} className="text-primary" />
-                         </button>
-                      </td>
+        </motion.div>
+      </div>
+    );
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const validFiles = Array.from(e.target.files).filter(file => {
+        const isValidExt = file.name.toLowerCase().endsWith('.xml');
+        const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
+        return isValidExt && isValidSize;
+      });
+      setImportFiles(prev => [...prev, ...validFiles]);
+      setUploadResults(null);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setImportFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const processUpload = async () => {
+    if (importFiles.length === 0) return;
+    setIsUploading(true);
+    setUploadProgress(0);
+    
+    let processed = 0;
+    let errors = 0;
+    const errorDetails: any[] = [];
+
+    for (let i = 0; i < importFiles.length; i++) {
+      const file = importFiles[i];
+      const formData = new FormData();
+      formData.append("files", file);
+
+      try {
+        const data = await safeJsonFetch("/api/esocial/s5002/import", {
+          method: "POST",
+          body: formData,
+        });
+        
+        if (data && data.success) {
+          processed += data.processed || 0;
+          errors += data.errors || 0;
+          if (data.errorDetails) errorDetails.push(...data.errorDetails);
+        } else {
+          errors++;
+          errorDetails.push({ fileName: file.name, error: data?.error || "Erro desconhecido" });
+        }
+      } catch (err: any) {
+        errors++;
+        errorDetails.push({ fileName: file.name, error: err.message });
+      }
+      
+      setUploadProgress(Math.round(((i + 1) / importFiles.length) * 100));
+    }
+
+    setUploadResults({ 
+      processed, 
+      errors, 
+      errorDetails 
+    });
+    setImportFiles([]);
+    fetchStats();
+    fetchAuditData(1, "");
+    setIsUploading(false);
+  };
+
+  const renderContent = () => {
+    if (activeTab === "Conferência DIRF") {
+      return (
+        <div className="flex flex-col gap-6">
+          <div className="card bg-white p-6 flex flex-col gap-6 border border-outline-variant shadow-sm">
+            <div className="flex justify-between items-center bg-surface-container/10 p-4 rounded-sm border border-outline-variant/50">
+              <div className="flex items-center gap-6">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Trabalhador</label>
+                  <select 
+                    className="bg-white border border-outline-variant rounded-sm py-2 px-3 text-xs font-bold w-72 focus:ring-1 focus:ring-primary outline-none"
+                    value={selectedTrabalhador}
+                    onChange={(e) => setSelectedTrabalhador(e.target.value)}
+                  >
+                    <option value="">Selecione um trabalhador...</option>
+                    {trabalhadoresList.map(t => (
+                      <option key={t.id} value={t.id}>{t.cpf} - {t.nome}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Ano Calendário</label>
+                  <select 
+                    className="bg-white border border-outline-variant rounded-sm py-2 px-3 text-xs font-bold w-32 focus:ring-1 focus:ring-primary outline-none"
+                    value={selectedAno}
+                    onChange={(e) => setSelectedAno(e.target.value)}
+                  >
+                    {Array.isArray(periodosDisponiveis) && periodosDisponiveis.map(p => p && p.anoCalendario !== undefined && (
+                      <option key={p.id} value={p.anoCalendario.toString()}>{p.anoCalendario}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <button 
+                onClick={fetchConferencia}
+                disabled={isLoading || !selectedTrabalhador}
+                className="btn-primary px-6 py-2 flex items-center gap-2"
+              >
+                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <TrendingUp size={16} />}
+                <span className="text-xs font-bold uppercase tracking-widest">Atualizar Tabela</span>
+              </button>
+            </div>
+
+            {!selectedTrabalhador ? (
+              <div className="flex flex-col items-center justify-center py-24 gap-4 bg-surface/30 border border-outline-variant rounded-sm border-dashed">
+                <Users className="text-secondary opacity-20" size={48} />
+                <p className="text-sm font-black text-secondary uppercase tracking-widest">Selecione um trabalhador para visualizar a conferência anual</p>
+              </div>
+            ) : isLoading ? (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 size={40} className="animate-spin text-primary opacity-20" />
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-outline-variant rounded-sm">
+                <table className="w-full text-left border-collapse bg-white">
+                  <thead>
+                    <tr className="bg-surface text-[10px] font-black text-secondary uppercase tracking-widest border-b border-outline-variant">
+                      <th className="px-4 py-3 sticky left-0 bg-surface z-10 border-r border-outline-variant w-[280px]">Classificação</th>
+                      <th className="px-4 py-3 text-center border-r border-outline-variant w-16">tpInfoIR</th>
+                      {['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez', 'Total'].map(m => (
+                        <th key={m} className={cn("px-3 py-3 text-right tabular-nums", m === 'Total' ? "bg-surface-container/30 font-black" : "font-medium")}>{m}</th>
+                      ))}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant">
+                    {/* Seção: Informações do Trabalhador */}
+                    <tr className="bg-surface-container/20">
+                      <td colSpan={15} className="px-4 py-2 text-[10px] font-black text-primary uppercase tracking-[0.2em]">Informações do Trabalhador</td>
+                    </tr>
+                    {Array.isArray(conferenciaData) && conferenciaData.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-surface-container/10 transition-all text-[11px]">
+                        <td className="px-4 py-3 sticky left-0 bg-white group-hover:bg-surface-container/10 z-10 border-r border-outline-variant font-bold text-on-surface truncate max-w-[280px]" title={row.label}>
+                          {row.label}
+                        </td>
+                        <td className="px-4 py-3 text-center border-r border-outline-variant font-black text-secondary/60">
+                          {row.tpInfoIR === "28" || row.tpInfoIR === "29" ? "" : row.tpInfoIR}
+                        </td>
+                        {Array.isArray(row.months) && row.months.map((val: number, mIdx: number) => (
+                          <td key={mIdx} className="px-3 py-3 text-right tabular-nums font-medium text-secondary">
+                            {val > 0 ? val.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "-"}
+                          </td>
+                        ))}
+                        <td className="px-3 py-3 text-right tabular-nums font-black text-on-surface bg-surface-container/10">
+                          {row.total > 0 ? row.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                    
+                    {/* Seção: Informações de Dependentes */}
+                    <tr className="bg-surface-container/20 border-t-2 border-outline-variant">
+                      <td colSpan={15} className="px-4 py-2 text-[10px] font-black text-primary uppercase tracking-[0.2em]">Informações para cada Dependente ligado ao trabalhador</td>
+                    </tr>
+                    {dependentesConferencia.length === 0 ? (
+                      <tr className="text-[11px] italic text-secondary/50">
+                        <td colSpan={15} className="px-4 py-8 text-center bg-surface/20">Não há dependentes vinculados aos blocos infoIRComplem processados para este período.</td>
+                      </tr>
+                    ) : (
+                      dependentesConferencia.map((dep, dIdx) => (
+                        <React.Fragment key={dIdx}>
+                          {/* Cabeçalho do Dependente */}
+                          <tr className="bg-surface/50 border-t border-outline-variant">
+                            <td colSpan={15} className="px-4 py-2 text-[9px] font-black text-secondary uppercase bg-surface-container/5">
+                              Dependente: {dep.nome}
+                            </td>
+                          </tr>
+                          {Object.entries(dep.fields || {}).map(([fieldName, data]: [string, any], fIdx) => (
+                            <tr key={fIdx} className="hover:bg-surface-container/10 transition-all text-[11px] border-b border-outline-variant/30">
+                              <td className="px-6 py-2 sticky left-0 bg-white group-hover:bg-surface-container/10 z-10 border-r border-outline-variant font-medium text-secondary truncate max-w-[280px]">
+                                {fieldName}
+                              </td>
+                              <td className="px-4 py-2 text-center border-r border-outline-variant font-black text-secondary/20 italic">
+                                -
+                              </td>
+                              {Array.isArray(data?.months) && data.months.map((val: number, mIdx: number) => (
+                                <td key={mIdx} className="px-3 py-2 text-right tabular-nums font-medium text-secondary/80">
+                                  {val > 0 ? val.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "-"}
+                                </td>
+                              ))}
+                              <td className="px-3 py-2 text-right tabular-nums font-black text-on-surface bg-surface-container/5">
+                                {data?.total > 0 ? data.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "-"}
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       );
     }
 
-    if (activeTab === "Trabalhadores") {
+    if (activeTab === "Importar XML") {
+      return (
+        <div className="flex flex-col gap-8 max-w-5xl mx-auto w-full py-8">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-2xl font-black text-on-surface tracking-tight">Importação de Eventos eSocial</h2>
+            <p className="text-sm text-secondary font-medium italic">Envie arquivos S-5002 (evtIrrfTot) originais do governo para auditoria.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="md:col-span-2 space-y-6">
+              <div 
+                className={cn(
+                  "border-2 border-dashed rounded-sm p-12 transition-all flex flex-col items-center justify-center gap-4 bg-white shadow-sm",
+                  importFiles.length > 0 ? "border-primary/50 bg-primary/5" : "border-outline-variant hover:border-primary/30"
+                )}
+              >
+                <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center text-primary/40">
+                  <CloudUpload size={32} />
+                </div>
+                <div className="text-center group">
+                  <label className="cursor-pointer">
+                    <span className="text-sm font-black text-primary hover:underline">Clique para selecionar</span>
+                    <span className="text-sm font-bold text-secondary italic"> ou arraste arquivos XML aqui</span>
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept=".xml" 
+                      className="hidden" 
+                      onChange={handleFileChange}
+                      disabled={isUploading}
+                    />
+                  </label>
+                  <p className="text-[10px] text-secondary font-black uppercase tracking-widest mt-2">Apenas .xml até 10MB por arquivo</p>
+                </div>
+              </div>
+
+              {importFiles.length > 0 && (
+                <div className="card bg-white p-0 overflow-hidden border border-outline-variant">
+                  <div className="px-6 py-4 border-b border-outline-variant bg-surface/50 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-on-surface uppercase tracking-widest">Fila de Importação ({importFiles.length})</span>
+                    <button 
+                      onClick={() => setImportFiles([])}
+                      className="text-[10px] font-black text-error uppercase hover:underline"
+                    >
+                      Limpar Tudo
+                    </button>
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto divide-y divide-outline-variant">
+                    {importFiles.map((file, idx) => (
+                      <div key={idx} className="px-6 py-3 flex items-center justify-between hover:bg-surface/30 transition-all group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-surface rounded flex items-center justify-center text-secondary">
+                            <FileText size={16} />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-on-surface truncate max-w-[200px]">{file.name}</span>
+                            <span className="text-[9px] text-secondary font-black opacity-60">{(file.size / 1024).toFixed(1)} KB</span>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => removeFile(idx)}
+                          className="p-1.5 text-secondary hover:text-error opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-6 bg-surface/30 border-t border-outline-variant">
+                    <button 
+                      disabled={isUploading}
+                      onClick={processUpload}
+                      className="btn-primary w-full py-3 flex items-center justify-center gap-3"
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" />
+                          <span className="font-black uppercase tracking-widest text-xs">Processando XMLs...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CloudUpload size={18} />
+                          <span className="font-black uppercase tracking-widest text-xs">Iniciar Importação</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {uploadResults && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={cn(
+                    "p-6 rounded-sm border flex items-center gap-4",
+                    uploadResults.errors > 0 ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  )}
+                >
+                  <div className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center",
+                    uploadResults.errors > 0 ? "bg-amber-200" : "bg-emerald-200"
+                  )}>
+                    {uploadResults.errors > 0 ? <AlertCircle size={24} /> : <CheckCheck size={24} />}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-black uppercase tracking-tight">Resultado do Processamento</h4>
+                    <p className="text-xs font-bold opacity-80 italic">
+                      {uploadResults.processed} arquivos importados com sucesso. {uploadResults.errors} falhas/duplicados detectados.
+                    </p>
+                    {uploadResults.errorDetails && uploadResults.errorDetails.length > 0 && (
+                      <div className="mt-4 space-y-2 border-t border-amber-200 pt-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-amber-900 border-none">Detalhamento dos Erros:</p>
+                          {uploadResults.errorDetails.some(e => e.error.includes("Período Fiscal")) && (
+                            <Link 
+                              href="/periodos" 
+                              className="text-[9px] font-black uppercase bg-amber-900 text-white px-2 py-1 rounded-sm hover:bg-black transition-all flex items-center gap-1"
+                            >
+                              <Calendar size={10} />
+                              Cadastrar Período
+                            </Link>
+                          )}
+                        </div>
+                        <div className="max-h-40 overflow-y-auto space-y-1 pr-2">
+                          {uploadResults.errorDetails.map((err, idx) => (
+                            <div key={idx} className="text-[10px] bg-white/50 p-2 rounded-sm border border-amber-200/50">
+                              <span className="font-black text-amber-950">{err.fileName}:</span>{" "}
+                              <span className="font-medium text-amber-800">{err.error}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </div>
+
+            <div className="space-y-6">
+              <div className="card bg-on-surface text-white p-8">
+                <h4 className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em] mb-6">Regras de Validação</h4>
+                <div className="space-y-6">
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-black">01</span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black mb-1">Namespace Oficial</p>
+                      <p className="text-[10px] text-white/60 font-medium italic leading-relaxed">Apenas eventos S-5002 autenticados com o schema evtIrrfTot são processados.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-black">02</span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black mb-1">Integridade Fiscal</p>
+                      <p className="text-[10px] text-white/60 font-medium italic leading-relaxed">O sistema cruza NRRECIBO e HASH para evitar duplicidade de lançamentos no período.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-black">03</span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-black mb-1">Consolidação Automática</p>
+                      <p className="text-[10px] text-white/60 font-medium italic leading-relaxed">Após o upload, os dados ficam disponíveis para auditoria e fechamento anual.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-surface border border-outline-variant p-6 rounded-sm">
+                <p className="text-[10px] text-secondary font-black uppercase tracking-widest mb-2">Suporte a Lote</p>
+                <p className="text-[11px] text-secondary font-medium leading-relaxed italic">
+                  Você pode selecionar centenas de arquivos simultaneamente. O processamento ocorre em background garantindo a performance da ferramenta.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === "Divergências Fiscais") {
+      return (
+        <div className="flex flex-col gap-8">
+          {/* Dashboard Superior */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div 
+              className={cn(
+                "card bg-white p-6 border-l-4 border-error flex flex-col gap-2 cursor-pointer transition-all hover:shadow-lg",
+                severidadeFilter === "CRITICA" && "bg-error/5 ring-1 ring-error/20"
+              )}
+              onClick={() => setSeveridadeFilter(severidadeFilter === "CRITICA" ? "" : "CRITICA")}
+            >
+              <span className="text-[10px] font-black text-secondary uppercase tracking-widest">Riscos Críticos</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-on-surface">{divergenciasStats?.bySeverity?.CRITICA || 0}</span>
+                <span className="text-xs font-bold text-error italic">Bloqueantes</span>
+              </div>
+              <p className="text-[10px] text-secondary font-medium leading-relaxed italic mt-2">Divergências que impedem a consolidação DIRF.</p>
+            </div>
+
+            <div 
+              className={cn(
+                "card bg-white p-6 border-l-4 border-amber-500 flex flex-col gap-2 cursor-pointer transition-all hover:shadow-lg",
+                tipoFilter === "PENSAO_DIVERGENTE" && "bg-amber-50 ring-1 ring-amber-200"
+              )}
+              onClick={() => setTipoFilter(tipoFilter === "PENSAO_DIVERGENTE" ? "" : "PENSAO_DIVERGENTE")}
+            >
+              <span className="text-[10px] font-black text-secondary uppercase tracking-widest">Análise de Pensão</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-on-surface">{divergenciasStats?.byType?.PENSAO_DIVERGENTE || 0}</span>
+                <span className="text-xs font-bold text-amber-600 italic">Alertas</span>
+              </div>
+              <p className="text-[10px] text-secondary font-medium leading-relaxed italic mt-2">Conflitos entre detalhes de dependentes e total IRRF.</p>
+            </div>
+
+            <div className="card bg-on-surface text-white p-6 flex flex-col gap-2">
+              <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">Ajustes Retroativos 2026</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black">{divergenciasStats?.retroAdjustments || 0}</span>
+                <span className="text-xs font-bold text-primary italic">Processados</span>
+              </div>
+              <p className="text-[10px] text-white/40 font-medium leading-relaxed italic mt-2">Retificações ano-base 2025 enviadas em 2026-01.</p>
+            </div>
+
+            <div className="card bg-primary text-white p-6 flex flex-col gap-2">
+              <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">Índice de Saúde Fiscal</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black">
+                  {divergenciasStats?.total > 0 ? Math.max(0, 100 - (divergenciasStats?.total * 2)).toFixed(0) : 100}%
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-white/20 rounded-full mt-2 overflow-hidden">
+                <div 
+                  className="h-full bg-white transition-all duration-1000" 
+                  style={{ width: `${divergenciasStats?.total > 0 ? Math.max(0, 100 - (divergenciasStats?.total * 2)) : 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 card bg-white p-6 flex flex-col gap-4">
+               <div className="flex justify-between items-center px-2">
+                 <h3 className="text-[10px] font-black text-secondary uppercase tracking-widest">Tendência de Inconsistências (Competência)</h3>
+                 <span className="text-[9px] font-bold text-primary italic">Consolidado por Mês</span>
+               </div>
+               <div className="flex items-end gap-3 h-32 px-2 pb-2 border-b border-outline-variant/30">
+                 {divergenciasStats?.timeline?.map((t: any, i: number) => (
+                   <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-help">
+                      <div className="w-full bg-surface-container relative rounded-t-sm transition-all group-hover:bg-primary/20" style={{ height: `${Math.min(100, (t.count / 5) * 100)}%` }}>
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-all">
+                          {t.count}
+                        </div>
+                      </div>
+                      <span className="text-[8px] font-bold text-secondary uppercase rotate-45 origin-left whitespace-nowrap mt-1">
+                        {t.competencia.includes("-") ? 
+                          `${t.competencia.split("-")[1]}/${t.competencia.split("-")[0]}` : 
+                          t.competencia}
+                      </span>
+                   </div>
+                 ))}
+                 {(!divergenciasStats?.timeline || divergenciasStats.timeline.length === 0) && (
+                   <div className="w-full h-full flex items-center justify-center text-[10px] text-secondary font-black uppercase opacity-20 italic">Sem dados históricos</div>
+                 )}
+               </div>
+            </div>
+
+            <div className="card bg-white p-6 flex flex-col gap-4">
+              <h3 className="text-[10px] font-black text-secondary uppercase tracking-widest">Top Erros por Categoria</h3>
+              <div className="space-y-3">
+                {Object.entries(divergenciasStats?.byType || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5).map(([type, count]: any, i) => (
+                  <div key={i} className="flex justify-between items-center text-[10px] font-bold">
+                    <span className="text-secondary uppercase truncate w-32">{type.replace(/_/g, " ")}</span>
+                    <div className="flex items-center gap-2 flex-1 ml-4">
+                      <div className="h-1.5 bg-surface-container flex-1 rounded-full overflow-hidden">
+                         <div className="h-full bg-primary" style={{ width: `${(count / (divergenciasStats?.total || 1)) * 100}%` }} />
+                      </div>
+                      <span className="text-on-surface w-4 text-right">{count}</span>
+                    </div>
+                  </div>
+                ))}
+                {Object.keys(divergenciasStats?.byType || {}).length === 0 && (
+                   <p className="text-[10px] text-secondary italic font-bold uppercase opacity-30 text-center py-8">Nenhum dado</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="card flex flex-col">
+            <div className="px-lg py-6 border-b border-outline-variant flex justify-between items-center bg-white">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-error/10 rounded-sm flex items-center justify-center text-error">
+                  <AlertCircle size={20} />
+                </div>
+                <div className="flex flex-col">
+                  <h2 className="text-base font-extrabold text-on-surface tracking-tight">Registro Cronológico de Inconsistências</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-[11px] text-secondary font-medium italic">Fila de resolução para fechamento de exercício</p>
+                    {(severidadeFilter || tipoFilter) && (
+                      <button 
+                        onClick={() => { setSeveridadeFilter(""); setTipoFilter(""); }}
+                        className="text-[9px] font-black text-primary uppercase bg-primary/5 px-2 py-0.5 rounded border border-primary/10 hover:bg-primary/10 transition-all"
+                      >
+                        Limpar Filtros
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary" />
+                  <input 
+                    type="text" 
+                    placeholder="Filtrar por nome ou CPF..."
+                    className="pl-9 pr-4 py-1.5 bg-surface border border-outline-variant rounded-sm text-[10px] font-bold uppercase tracking-widest w-64 focus:ring-1 focus:ring-primary outline-none transition-all"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <select 
+                    className="px-3 py-1.5 bg-surface border border-outline-variant rounded-sm text-[10px] font-bold uppercase tracking-widest"
+                    value={severidadeFilter}
+                    onChange={(e) => setSeveridadeFilter(e.target.value)}
+                  >
+                    <option value="">Severidade (Todas)</option>
+                    <option value="CRITICA">Crítica</option>
+                    <option value="ALTA">Alta</option>
+                    <option value="MEDIA">Média</option>
+                    <option value="BAIXA">Baixa</option>
+                  </select>
+                  <select 
+                    className="px-3 py-1.5 bg-surface border border-outline-variant rounded-sm text-[10px] font-bold uppercase tracking-widest"
+                    value={tipoFilter}
+                    onChange={(e) => setTipoFilter(e.target.value)}
+                  >
+                    <option value="">Tipo (Todos)</option>
+                    <option value="PENSAO_DIVERGENTE">Pensão Divergente</option>
+                    <option value="PLANO_SAUDE_DIVERGENTE">Plano de Saúde</option>
+                    <option value="BASE_IRRF_DIVERGENTE">Base IRRF</option>
+                    <option value="CPF_NAO_CADASTRADO">CPF não cadastrado</option>
+                    <option value="EMPRESA_NAO_CADASTRADA">Empresa não cadastrada</option>
+                  </select>
+                </div>
+                <div className="h-8 w-[1px] bg-outline-variant" />
+                <button 
+                  onClick={() => fetchDivergencias(severidadeFilter, tipoFilter)}
+                  className="p-2 hover:bg-surface-container rounded-full transition-all text-secondary"
+                  title="Atualizar Dados"
+                >
+                  <History size={18} className={isLoading ? "animate-spin" : ""} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-surface text-[10px] font-black text-secondary uppercase tracking-widest">
+                    <th className="px-lg py-4 border-b border-outline-variant">Identificação</th>
+                    <th className="px-lg py-4 border-b border-outline-variant">Tipo / Severidade</th>
+                    <th className="px-lg py-4 border-b border-outline-variant w-1/3">Descrição da Inconsistência</th>
+                    <th className="px-lg py-4 border-b border-outline-variant">Data Detecção</th>
+                    <th className="px-lg py-4 border-b border-outline-variant text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={5} className="px-lg py-20 text-center"><Loader2 size={32} className="animate-spin text-primary inline-block opacity-20" /></td>
+                    </tr>
+                  ) : divergenciasData.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-lg py-32 text-center text-xs text-secondary italic font-bold uppercase tracking-widest opacity-40">Nenhuma inconsistência pendente. Sistema saudável.</td>
+                    </tr>
+                  ) : (
+                    divergenciasData.map((d: any) => (
+                      <tr key={d.id} className="hover:bg-surface-container/30 transition-all">
+                        <td className="px-lg py-5">
+                           <div className="flex flex-col">
+                             <span className="text-sm font-bold text-on-surface">
+                               {d.fechamento?.trabalhador?.nome || d.trabalhador?.nome || d.descricao?.split('(')[1]?.split(')')[0] || "Trabalhador não identificado"}
+                             </span>
+                             <span className="text-[10px] text-secondary font-black uppercase tracking-tight">
+                                {d.fechamento ? (
+                                  <>CPF: {d.fechamento.trabalhador?.cpf} | {d.fechamento.empresa?.razaoSocial}</>
+                                ) : d.trabalhador ? (
+                                  <>CPF: {d.trabalhador.cpf} | {d.empresa?.razaoSocial || "Empresa não identificada"}</>
+                                ) : (
+                                  <>Inconsistência de Cadastro Detectada</>
+                                )}
+                             </span>
+                           </div>
+                        </td>
+                        <td className="px-lg py-5">
+                           <div className="flex flex-col gap-1.5">
+                              <span className="text-[10px] font-bold text-on-surface">{d.tipo}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase w-fit ${
+                                d.severidade === 'CRITICA' ? 'bg-error text-white' :
+                                d.severidade === 'ALTA' ? 'bg-orange-500 text-white' :
+                                'bg-amber-100 text-amber-700'
+                              }`}>
+                                Severidade: {d.severidade}
+                              </span>
+                           </div>
+                        </td>
+                        <td className="px-lg py-5 text-xs font-medium text-secondary leading-relaxed bg-surface/10 italic">
+                          {d.dtEmissao ? `Emissão: ${new Date(d.dtEmissao).toLocaleDateString()} | ` : ''}{d.descricao}
+                        </td>
+                        <td className="px-lg py-5 text-[11px] font-bold text-secondary">
+                          {new Date(d.createdAt).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="px-lg py-5 text-right">
+                           <button 
+                             onClick={() => resolveDivergencia(d.id, true)}
+                             className="p-2.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-sm hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                             title="Marcar como Resolvido"
+                           >
+                              <CheckCheck size={16} />
+                           </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === "Consolidação Anual") {
       return (
         <div className="card flex flex-col">
           <div className="px-lg py-6 border-b border-outline-variant flex justify-between items-center bg-white">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-primary/10 rounded-sm flex items-center justify-center text-primary">
-                <Users size={20} />
+              <div className="w-10 h-10 bg-emerald-100 rounded-sm flex items-center justify-center text-emerald-700">
+                <TrendingUp size={20} />
               </div>
               <div>
-                <h2 className="text-base font-extrabold text-on-surface tracking-tight">Base de Trabalhadores</h2>
-                <p className="text-[11px] text-secondary font-medium">Listagem consolidada de CPFs e nomes importados</p>
+                <h2 className="text-base font-extrabold text-on-surface tracking-tight">Consolidação Fiscal Anual</h2>
+                <p className="text-[11px] text-secondary font-medium italic">Base consolidada para DIRF e Informe de Rendimentos</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary" size={14} />
-                <input 
-                  type="text"
-                  placeholder="Buscar por Nome ou CPF..."
-                  className="pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded-sm text-xs focus:ring-1 focus:ring-primary outline-none transition-all w-64"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <button 
-                className="btn-primary flex items-center gap-2 py-2"
-                onClick={() => openRegisterTrabalhadorModal()}
+              <select 
+                className="px-4 py-2 bg-surface border border-outline-variant rounded-sm text-xs font-bold"
+                value={selectedPeriodo}
+                onChange={(e) => setSelectedPeriodo(e.target.value)}
               >
-                <Plus size={14} />
-                <span>Novo Trabalhador</span>
+                <option value="">Selecionar Período</option>
+                {stats?.periodos?.map((p: any) => p && (
+                  <option key={p.id} value={p.id}>{p.anoCalendario}</option>
+                ))}
+              </select>
+              <button 
+                className="btn-primary flex items-center gap-2 py-2 px-6"
+                disabled={isConsolidating || !selectedPeriodo}
+                onClick={handleConsolidation}
+              >
+                {isConsolidating ? <Loader2 size={14} className="animate-spin" /> : <Settings2 size={14} />}
+                <span>Processar Consolidação</span>
               </button>
             </div>
           </div>
+          
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-surface text-[10px] font-black text-secondary uppercase tracking-widest">
-                  <th className="px-lg py-4 border-b border-outline-variant">CPF</th>
-                  <th className="px-lg py-4 border-b border-outline-variant">Nome Completo</th>
-                  <th className="px-lg py-4 border-b border-outline-variant text-center">Eventos Associados</th>
-                  <th className="px-lg py-4 border-b border-outline-variant text-center">Última Atividade</th>
+                  <th className="px-lg py-4 border-b border-outline-variant">Empresa / Trabalhador</th>
+                  <th className="px-lg py-4 border-b border-outline-variant">Exercício</th>
+                  <th className="px-lg py-4 border-b border-outline-variant text-center">Rend. Tributáveis</th>
+                  <th className="px-lg py-4 border-b border-outline-variant text-center">IRRF Retido</th>
+                  <th className="px-lg py-4 border-b border-outline-variant text-center">Saúde / Deduções</th>
+                  <th className="px-lg py-4 border-b border-outline-variant text-center">Divergências</th>
                   <th className="px-lg py-4 border-b border-outline-variant text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={5} className="px-lg py-20 text-center"><Loader2 size={32} className="animate-spin text-primary inline-block opacity-20" /></td>
+                    <td colSpan={7} className="px-lg py-20 text-center"><Loader2 size={32} className="animate-spin text-primary inline-block opacity-20" /></td>
                   </tr>
-                ) : trabalhadoresData.length === 0 ? (
+                ) : fechamentosData.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-lg py-32 text-center text-xs text-secondary italic font-bold">Nenhum trabalhador encontrado.</td>
+                    <td colSpan={7} className="px-lg py-32 text-center text-xs text-secondary italic font-bold uppercase tracking-widest opacity-40">Nenhum fechamento anual realizado. Selecione um período e processe.</td>
                   </tr>
                 ) : (
-                  trabalhadoresData.map((trab: any) => (
-                    <tr key={trab.id} className="hover:bg-surface-container/30 transition-all">
-                      <td className="px-lg py-5 text-sm font-black text-primary">{trab.cpf}</td>
-                      <td className="px-lg py-5 text-sm font-bold text-on-surface uppercase">{trab.nome}</td>
+                  fechamentosData.map((f: any) => (
+                    <tr key={f.id} className="hover:bg-surface-container/30 transition-all group">
+                      <td className="px-lg py-5">
+                         <div className="flex flex-col">
+                           <span className="text-sm font-bold text-on-surface">{f.trabalhador?.nome || "N/A"}</span>
+                           <span className="text-[10px] text-secondary font-black uppercase tracking-tight">{f.empresa?.razaoSocial || "N/A"} ({f.trabalhador?.cpf || "N/A"})</span>
+                         </div>
+                      </td>
+                      <td className="px-lg py-5 text-sm font-bold text-on-surface">{f.ano}</td>
                       <td className="px-lg py-5 text-sm font-black text-on-surface text-center tabular-nums">
-                        {trab._count?.eventos || 0}
+                        R$ {Number(f.totalRendTrib).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-lg py-5 text-sm text-secondary text-center">
-                        {new Date(trab.createdAt).toLocaleDateString()}
+                      <td className="px-lg py-5 text-sm font-black text-on-surface text-center tabular-nums">
+                        R$ {Number(f.totalIrrf).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-lg py-5 text-right flex justify-end gap-2">
-                         <button className="p-2 hover:bg-white border border-outline-variant rounded transition-all" onClick={() => openDetails(trab)} title="Ver detalhes">
-                            <Eye size={14} className="text-secondary" />
-                         </button>
-                         <button className="p-2 hover:bg-white border border-primary/20 rounded transition-all" onClick={() => openRegisterTrabalhadorModal(trab)} title="Editar">
-                            <Pencil size={14} className="text-primary" />
-                         </button>
+                      <td className="px-lg py-5 text-sm font-black text-on-surface text-center tabular-nums">
+                        R$ {Number(f.totalPlanoSaude).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-lg py-5 text-center">
+                         {(f.divergencias?.length || 0) > 0 ? (
+                           <span className="px-3 py-1 bg-error/10 text-error text-[9px] font-bold uppercase rounded-full">
+                             {f.divergencias?.length} Divergências
+                           </span>
+                         ) : (
+                           <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-bold uppercase rounded-full">
+                             Consolidado
+                           </span>
+                         )}
+                      </td>
+                      <td className="px-lg py-5 text-right">
+                         <div className="flex justify-end gap-2 text-right">
+                           <button 
+                             onClick={() => {
+                               setSelectedFechamento(f);
+                               setShowInformeModal(true);
+                             }}
+                             className="p-2 bg-surface hover:bg-white border border-outline-variant rounded transition-all shadow-sm"
+                           >
+                              <Eye size={14} className="text-primary" />
+                           </button>
+                           <button className="p-2 bg-surface hover:bg-white border border-outline-variant rounded transition-all shadow-sm">
+                              <Download size={14} className="text-secondary" />
+                           </button>
+                         </div>
                       </td>
                     </tr>
                   ))
@@ -503,14 +1281,12 @@ export default function EsocialTablesPage() {
       return (
         <div className="card flex flex-col">
           <div className="px-lg py-6 border-b border-outline-variant flex justify-between items-center bg-white">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-primary/10 rounded-sm flex items-center justify-center text-primary">
-                <ShieldCheck size={20} />
-              </div>
-              <div>
-                <h2 className="text-base font-extrabold text-on-surface tracking-tight">Painel de Auditoria S-5002</h2>
-                <p className="text-[11px] text-secondary font-medium italic">Cruzamento de base calculada vs base XML informada</p>
-              </div>
+            <div className="flex flex-col">
+              <h2 className="text-base font-extrabold text-on-surface tracking-tight">Painel de Auditoria S-5002</h2>
+              <p className="text-[11px] text-secondary font-medium italic">
+                A auditoria de XMLs S-5002 realiza o cruzamento dos dados oficiais do governo (bases de cálculo e valores retidos) 
+                com os registros do sistema, garantindo a integridade da DIRF e identificando divergências fiscais.
+              </p>
             </div>
             <div className="flex items-center gap-4">
               <div className="relative">
@@ -518,17 +1294,26 @@ export default function EsocialTablesPage() {
                 <input 
                   type="text"
                   placeholder="Buscar CPF ou CNPJ..."
-                  className="pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded-sm text-xs focus:ring-1 focus:ring-primary outline-none transition-all w-64"
+                  className="pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded-sm text-xs focus:ring-1 focus:ring-primary outline-none transition-all w-64 uppercase font-bold tracking-tighter"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
               <button 
-                className="btn-primary flex items-center gap-2 py-2"
+                className="btn-outline flex items-center gap-2 py-2 px-4 bg-white border-primary/20 text-primary hover:bg-primary/5 transition-all text-xs font-bold"
+                onClick={handleRefreshAudit}
+                disabled={isLoading || isUploading}
+              >
+                <History size={14} className={isLoading ? "animate-spin" : ""} />
+                <span>Atualizar Auditoria</span>
+              </button>
+              <button 
+                className="btn-primary flex items-center gap-2 py-2 px-6 shadow-lg shadow-primary/20 text-xs font-bold disabled:opacity-50"
                 onClick={() => document.getElementById("s5002-upload")?.click()}
+                disabled={isUploading}
               >
                 <CloudUpload size={14} />
-                <span>Auditar XMLs</span>
+                <span>{isUploading ? "Aguarde..." : "Importar Novos XMLs"}</span>
                 <input id="s5002-upload" type="file" multiple className="hidden" accept=".xml" onChange={handleS5002Upload} />
               </button>
             </div>
@@ -559,12 +1344,12 @@ export default function EsocialTablesPage() {
                   auditData.map((event: any) => (
                     <tr key={event.id} className="hover:bg-surface-container/30 transition-all group">
                       <td className="px-lg py-5 text-sm font-bold text-on-surface">
-                        {new Date(event.competencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' })}
+                        {new Date(event.competencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' })}
                       </td>
                       <td className="px-lg py-5">
                          <div className="flex flex-col">
-                           <span className="text-sm font-bold text-primary">{event.trabalhador.cpf}</span>
-                           <span className="text-[10px] text-secondary font-black uppercase tracking-tight">{event.trabalhador.nome}</span>
+                           <span className="text-sm font-bold text-primary">{event.trabalhador?.cpf || "N/A"}</span>
+                           <span className="text-[10px] text-secondary font-black uppercase tracking-tight">{event.trabalhador?.nome || "N/A"}</span>
                          </div>
                       </td>
                       <td className="px-lg py-5 text-sm font-black text-on-surface text-center tabular-nums">
@@ -586,8 +1371,17 @@ export default function EsocialTablesPage() {
                          )}>
                            {event.audit.status}
                          </span>
+                         
+                         {event.audit.isRetificacaoRetroativa && (
+                           <span className="block mt-1 text-[8px] font-black text-amber-600 border border-amber-200 bg-amber-50 px-1 rounded uppercase tracking-tighter">Retificado (DIRF 2026)</span>
+                         )}
+
                          {event.audit.healthPlanError && (
-                           <span className="block mt-1 text-[8px] font-black text-error uppercase tracking-tighter">Erro de Plano de Saúde</span>
+                           <span className="block mt-1 text-[8px] font-black text-error border border-error/20 bg-error/5 px-1 rounded uppercase tracking-tighter">Erro Plano Saúde</span>
+                         )}
+
+                         {event.audit.pensionError && (
+                           <span className="block mt-1 text-[8px] font-black text-error border border-error/20 bg-error/5 px-1 rounded uppercase tracking-tighter">Erro de Pensão</span>
                          )}
                       </td>
                       <td className="px-lg py-5 text-right">
@@ -708,6 +1502,27 @@ export default function EsocialTablesPage() {
 
     return (
       <>
+        {/* Progress Overlay */}
+        {isUploading && (
+          <div className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+            <div className="bg-white p-8 rounded-sm shadow-2xl flex flex-col items-center gap-4 max-w-xs w-full">
+              <Loader2 className="animate-spin text-primary" size={48} />
+              <div className="text-center">
+                <p className="text-sm font-black text-on-surface uppercase tracking-widest">Processando Auditoria...</p>
+                <p className="text-[10px] text-secondary font-medium italic mt-1">Isso pode levar alguns minutos dependendo do volume de arquivos.</p>
+              </div>
+              <div className="w-full bg-surface-container rounded-full h-1.5 mt-2 overflow-hidden">
+                <motion.div 
+                  className="bg-primary h-full rounded-full" 
+                  initial={{ width: 0 }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 15, repeat: Infinity }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Table Structure Cards */}
         <div className="grid grid-cols-4 gap-6">
           {tableCards.map((card) => {
@@ -1068,6 +1883,7 @@ export default function EsocialTablesPage() {
   return (
     <div className="flex flex-col gap-8 -mt-margin-page -mx-margin-page p-margin-page h-full bg-[#FAF9FC]">
       {renderDataModal()}
+      {showInformeModal && renderInformeModal()}
       {/* Top Header Section */}
       <div className="flex items-center justify-between border-b border-outline-variant bg-white px-8 -mx-8 -mt-8 py-6 h-auto min-h-24 sticky top-0 z-30 shadow-sm transition-all">
         <div className="flex items-center gap-1">
@@ -1084,7 +1900,7 @@ export default function EsocialTablesPage() {
         </div>
 
         <nav className="flex items-center h-full">
-          {["Auditoria S-5002", "Empregadores", "Trabalhadores", "Tabelas", "Histórico", "Relatórios"].map((tab) => (
+          {["Auditoria S-5002", "Conferência DIRF", "Consolidação Anual", "Divergências Fiscais", "Importar XML", "Tabelas", "Histórico", "Relatórios"].map((tab) => (
             <button
               key={tab}
               onClick={() => {

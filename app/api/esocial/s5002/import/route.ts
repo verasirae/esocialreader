@@ -1,152 +1,161 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { XMLParser } from "fast-xml-parser";
 import crypto from "crypto";
+import { storageService } from "@/services/storage/supabase-storage.service";
+import { queueService } from "@/services/esocial/queue.service";
+import { s5002Parser } from "@/services/parser/s5002-parser.service";
+import { StatusProcessamento, EsocialAmbiente } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return NextResponse.json({ error: "Content-Type deve ser multipart/form-data" }, { status: 400 });
+    }
+
     const formData = await req.formData();
     const files = formData.getAll("files") as File[];
+    const cnpjRaizHint = formData.get("cnpjRaiz") as string;
 
     if (!files || files.length === 0) {
       return NextResponse.json({ error: "Nenhum arquivo enviado" }, { status: 400 });
     }
 
-    const parser = new XMLParser({
-      ignoreAttributes: false,
-      attributeNamePrefix: "@_",
-    });
-
-    let processed = 0;
-    let errors = 0;
+    let queuedCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
 
     for (const file of files) {
       try {
-        const xmlText = await file.text();
-        const hash = crypto.createHash("md5").update(xmlText).digest("hex");
+        const xmlContent = await file.text();
+        
+        // Extrair cnpjRaiz do XML
+        const parsedX = s5002Parser.parse(xmlContent);
+        const cnpjRaiz = cnpjRaizHint || parsedX.cnpjRaiz;
+        const cpfBenef = parsedX.trabalhador.cpfBenef;
 
-        // Verificar se já foi importado
-        const existing = await prisma.s5002.findUnique({ where: { xmlHash: hash } });
-        if (existing) continue;
-
-        const jsonObj = parser.parse(xmlText);
-        const s5002Data = jsonObj?.eSocial?.evtIrrfTot;
-
-        if (!s5002Data) {
-          console.error("Estrutura S-5002 não encontrada no XML");
-          errors++;
+        if (!cnpjRaiz) {
+          console.error(`Arquivo ${file.name} sem CNPJ identificado.`);
+          errorCount++;
+          errors.push(`${file.name}: CNPJ não identificado no XML`);
           continue;
         }
 
-        const ideEmpregador = s5002Data.ideEmpregador;
-        const ideTrabalhador = s5002Data.ideTrabalhador;
-        const infoIrrf = s5002Data.infoIrrf;
-        const perApur = s5002Data.ideEvento?.perApur;
+        const empresa = await prisma.empresa.findUnique({
+          where: { cnpjRaiz }
+        });
 
-        // 1. Upsert Empresa (CNPJ Raiz)
-        const empresa = await prisma.empresa.upsert({
-          where: { cnpjRaiz: ideEmpregador.nrInsc.substring(0, 8) },
-          update: { cnpjCompleto: ideEmpregador.nrInsc },
-          create: { 
-            cnpjRaiz: ideEmpregador.nrInsc.substring(0, 8),
-            cnpjCompleto: ideEmpregador.nrInsc
+        // REQUISITO: Se a empresa não estiver no sistema, bloqueia importação
+        if (!empresa) {
+          errorCount++;
+          errors.push(`${file.name}: Empresa ${cnpjRaiz} não cadastrada. Cadastre a empresa antes de importar S-5002.`);
+          continue;
+        }
+
+        // REQUISITO: Se o trabalhador não estiver no sistema, bloqueia importação
+        const trabalhador = await prisma.trabalhador.findUnique({
+          where: { empresaId_cpf: { empresaId: empresa.id, cpf: cpfBenef } }
+        });
+
+        if (!trabalhador) {
+          errorCount++;
+          errors.push(`${file.name}: Trabalhador ${cpfBenef} não identificado na empresa ${empresa.razaoSocial}. Cadastre o trabalhador antes de importar S-5002.`);
+          continue;
+        }
+
+        const hash = crypto.createHash("sha256").update(xmlContent).digest("hex");
+
+        // 1. Garantir Registro de Storage (Deduplicação física)
+        const storagePath = `xml/original/${cnpjRaiz}/${hash}.xml`;
+        const storageRecord = await prisma.esocialXmlStorage.upsert({
+          where: { hashArquivo: hash },
+          update: {},
+          create: {
+            hashArquivo: hash,
+            storagePath: storagePath
           }
         });
 
-        // 2. Upsert Trabalhador
-        const trabalhador = await prisma.trabalhador.upsert({
-          where: { cpf: ideTrabalhador.cpfTrab },
-          update: {
-            empresaId: empresa.id
-          },
-          create: { 
-            cpf: ideTrabalhador.cpfTrab,
-            nome: "Trabalhador " + ideTrabalhador.cpfTrab.substring(0, 3), // Nome placeholder se não houver
-            empresaId: empresa.id
-          }
-        });
+        // Garantir que o arquivo físico existe
+        try {
+          await storageService.uploadXml(storagePath, xmlContent);
+        } catch (e) {
+          // Ignora se já existir
+        }
 
-        // 3. Criar Evento S5002
-        // Converter perApur (YYYY-MM) para Data
-        const [year, month] = perApur.split("-");
-        const competencia = new Date(parseInt(year), parseInt(month) - 1, 1);
+        // 2. Registrar Lote (Histórico Operacional)
+        const resolvedEmpresaId = empresa.id;
+        const resolvedTrabalhadorId = trabalhador.id;
 
-        const evento = await prisma.s5002.create({
+        const lote = await prisma.esocialLote.create({
           data: {
-            empresaId: empresa.id,
-            trabalhadorId: trabalhador.id,
-            competencia,
-            nrRecibo: s5002Data.ideEvento?.nrRecibo || hash.substring(0, 20),
-            xmlHash: hash,
+            empresaId: resolvedEmpresaId,
+            storageId: storageRecord.id,
+            hashArquivo: hash,
+            nomeArquivo: file.name,
+            storagePath: storageRecord.storagePath,
+            status: StatusProcessamento.pendente,
+            totalEventos: 1
           }
         });
 
-        // 4. Processar dmDev (Demonstrativos)
-        const dmDevs = Array.isArray(infoIrrf?.dmDev) ? infoIrrf.dmDev : infoIrrf?.dmDev ? [infoIrrf.dmDev] : [];
-        
-        for (const dm of dmDevs) {
-          const dmRecord = await prisma.s5002DmDev.create({
-            data: {
-              s5002Id: evento.id,
-              ideDmDev: dm.ideDmDev,
-              dtPgto: dm.dtPgto ? new Date(dm.dtPgto) : null,
-              tpPgto: dm.tpPgto ? parseInt(dm.tpPgto) : null,
-            }
-          });
-
-          // Processar infoIR dentro de dmDev
-          const infoIRs = Array.isArray(dm.infoIR) ? dm.infoIR : dm.infoIR ? [dm.infoIR] : [];
-          for (const ir of infoIRs) {
-            await prisma.s5002InfoIR.create({
-              data: {
-                dmDevId: dmRecord.id,
-                tpInfoIR: ir.tpInfoIR,
-                valor: ir.vlrBase || 0,
-              }
+        // 3. Adicionar na Fila para Processamento Lógico (Assíncrono via after)
+        after(async () => {
+          try {
+            await queueService.addJob("s5002-process", {
+              xmlContent,
+              empresaId: resolvedEmpresaId,
+              trabalhadorId: resolvedTrabalhadorId,
+              loteId: lote.id,
+              xmlPath: storageRecord.storagePath,
+              xmlHash: hash
             });
+          } catch (jobErr) {
+            console.error(`[Import-After] Erro ao processar job para ${file.name}:`, jobErr);
           }
-        }
+        });
 
-        // 5. Processar Totais (CR)
-        const totais = Array.isArray(infoIrrf?.totRec) ? infoIrrf.totRec : infoIrrf?.totRec ? [infoIrrf.totRec] : [];
-        for (const tot of totais) {
-          await prisma.s5002Totais.create({
-            data: {
-              s5002Id: evento.id,
-              codReceita: tot.codReceit,
-              vlrRendTrib: tot.vlrRendTrib || 0,
-              vlrRendTrib13: tot.vlrRendTrib13 || 0,
-              vlrPrevOficial: tot.vlrPrevOficial || 0,
-              vlrIrrf: tot.vlrIrrf || 0,
-              vlrIsento: tot.vlrIsento || 0,
-            }
-          });
+        queuedCount++;
+      } catch (err: any) {
+        console.error(`Erro ao enfileirar arquivo ${file.name}:`, err);
+        if (err.name === "PrismaClientValidationError") {
+          console.error(`DETALHE VALIDACAO PRISMA em ${file.name}:`, err.message);
         }
-
-        // 6. Planos de Saúde e Dependentes (Simplificado p/ este exemplo)
-        // Auditoria estaria aqui...
-        
-        processed++;
-      } catch (fileErr) {
-        console.error("Erro ao importar arquivo:", file.name, fileErr);
-        errors++;
+        errorCount++;
+        errors.push(`${file.name}: ${err.message}`);
       }
     }
 
-    // Registrar log global de importação XML
-    await prisma.esocialImportLog.create({
-      data: {
-        tableId: "S5002",
-        fileName: `Lote-${new Date().getTime()}`,
-        processed,
-        errors,
-        status: errors === 0 ? "Sucesso" : "Concluído com avisos",
-      }
+    const allFailed = files.length > 0 && queuedCount === 0;
+
+    // Registrar Log no Histórico Centralizado
+    try {
+      await prisma.esocialImportLog.create({
+        data: {
+          tableId: "S-5002",
+          fileName: files.length === 1 ? files[0].name : `${files.length} arquivos XML`,
+          processed: queuedCount,
+          errors: errorCount,
+          status: errorCount === 0 ? "Sucesso" : queuedCount > 0 ? "Concluído com avisos" : "Falha",
+        }
+      });
+    } catch (logErr) {
+      console.error("[S5002-Import] Falha ao registrar log:", logErr);
+    }
+
+    return NextResponse.json({ 
+      success: !allFailed, 
+      total: files.length,
+      queued: queuedCount,
+      errors: errorCount,
+      detailErrors: errors,
+      message: allFailed 
+        ? `Falha total na importação: ${errorCount} erros encontrados.`
+        : `Importação processada: ${queuedCount} arquivos enfileirados, ${errorCount} erros.`
     });
 
-    return NextResponse.json({ success: true, processed, errors });
-  } catch (error) {
-    console.error("Erro na rota de importação S5002:", error);
-    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+  } catch (error: any) {
+    console.error("Erro na rota de importação refatorada:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

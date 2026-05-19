@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { s5002ProcessorService } from "@/services/esocial/s5002-processor.service";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { cnpjCompleto, razaoSocial, nomeFantasia } = body;
+    const cnpjCompletoRaw = String(body.cnpjCompleto || "").replace(/\D/g, "");
+    const cnpjCompleto = cnpjCompletoRaw.padStart(14, "0");
+    const { razaoSocial, nomeFantasia } = body;
 
-    if (!cnpjCompleto || cnpjCompleto.length < 14) {
+    if (!cnpjCompleto || cnpjCompleto.length < 8) {
       return NextResponse.json({ error: "CNPJ inválido" }, { status: 400 });
     }
 
@@ -26,6 +29,9 @@ export async function POST(req: NextRequest) {
         nomeFantasia
       }
     });
+
+    // Re-processar eventos que estavam pendentes por falta deste cadastro
+    await s5002ProcessorService.reprocessPending({ cnpjRaiz });
 
     return NextResponse.json(empresa);
   } catch (error) {
