@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Decimal } from "@prisma/client/runtime/library";
+import { FiscalEngine, FiscalNature } from "@/lib/fiscal/engine";
 
 export class ConsolidacaoFiscalService {
   /**
@@ -65,6 +66,26 @@ export class ConsolidacaoFiscalService {
       return null;
     }
 
+    // Resolve o ID da empresa para rodar a trilha de auditoria
+    let empresaId = dmDevs[0]?.s5002Evento?.empresaId || periodosAnt[0]?.s5002Evento?.empresaId;
+    if (!empresaId && trabalhadorId) {
+      const tr = await prisma.trabalhador.findUnique({ where: { id: trabalhadorId } });
+      empresaId = tr?.empresaId || "";
+    }
+    if (!empresaId) {
+      const raiz = cnpjRaiz || dmDevs[0]?.s5002Evento?.evento?.cnpjRaiz || periodosAnt[0]?.s5002Evento?.evento?.cnpjRaiz;
+      if (raiz) {
+        const emp = await prisma.empresa.findUnique({ where: { cnpjRaiz: raiz } });
+        empresaId = emp?.id || "";
+      }
+    }
+
+    if (!empresaId) throw new Error(`Empresa não identificada para o processamento (${trabalhadorId || cpfBenef})`);
+
+    const [ano, mes] = periodo.split("-");
+    const auditEntries = await FiscalEngine.buildAuditTrail(empresaId, ano, mes, trabalhadorId);
+    const activeEntries = auditEntries.filter(e => e.incluido !== false);
+
     let totalRendTrib = new Decimal(0);
     let totalRendTrib13 = new Decimal(0);
     let totalIrrf = new Decimal(0);
@@ -74,56 +95,37 @@ export class ConsolidacaoFiscalService {
     let totalPensao = new Decimal(0);
     let totalPlanoSaude = new Decimal(0);
     let totalDependentes = new Decimal(0);
+
+    for (const e of activeEntries) {
+      if (e.fiscalNature === FiscalNature.REND_TRIBUTAVEL) {
+        if (e.codigoOficial === "12") {
+          totalRendTrib13 = totalRendTrib13.plus(e.valor);
+        } else {
+          totalRendTrib = totalRendTrib.plus(e.valor);
+        }
+      } else if (e.fiscalNature === FiscalNature.PREVIDENCIA_OFICIAL) {
+        if (e.codigoOficial === "42") {
+          totalPrev13 = totalPrev13.plus(e.valor);
+        } else {
+          totalPrev = totalPrev.plus(e.valor);
+        }
+      } else if (e.fiscalNature === FiscalNature.IRRF_RETIDO) {
+        if (e.codigoOficial === "IRRF_13") {
+          totalIrrf13 = totalIrrf13.plus(e.valor);
+        } else {
+          totalIrrf = totalIrrf.plus(e.valor);
+        }
+      } else if (e.fiscalNature === FiscalNature.PENSAO) {
+        totalPensao = totalPensao.plus(e.valor);
+      } else if (e.fiscalNature === FiscalNature.PLANO_SAUDE) {
+        totalPlanoSaude = totalPlanoSaude.plus(e.valor);
+      } else if (e.fiscalNature === FiscalNature.DEPENDENTE) {
+        totalDependentes = totalDependentes.plus(e.valor);
+      }
+    }
     
     let eventoOrigemId = dmDevs[0]?.s5002Evento?.eventoId || periodosAnt[0]?.s5002Evento?.eventoId || "";
     let resolvedCpf = cpfBenef || dmDevs[0]?.s5002Evento?.evento?.cpfBenef || periodosAnt[0]?.s5002Evento?.evento?.cpfBenef || "";
-
-    // Processar demonstrativos
-    const processedDms = new Set<string>();
-    for (const dm of dmDevs) {
-      const key = `${dm.s5002EventoId}_${dm.ideDmDev}_${dm.perRef}`;
-      if (processedDms.has(key)) continue;
-      processedDms.add(key);
-
-      if (dm.totais) {
-        for (const tot of dm.totais) {
-          totalRendTrib = totalRendTrib.plus(tot.vlrRendTrib);
-          totalRendTrib13 = totalRendTrib13.plus(tot.vlrRendTrib13 || 0);
-          totalPrev = totalPrev.plus(tot.vlrPrevOficial);
-          totalPrev13 = totalPrev13.plus(tot.vlrPrevOficial13 || 0);
-          totalIrrf = totalIrrf.plus(tot.vlrCRMen);
-          totalIrrf13 = totalIrrf13.plus(tot.vlrCR13Men || 0);
-        }
-      }
-    }
-
-    // Processar períodos anteriores (ajustes)
-    const processedPas = new Set<string>();
-    for (const pa of periodosAnt) {
-      const key = `${pa.s5002EventoId}_${pa.perRefAjuste}`;
-      if (processedPas.has(key)) continue;
-      processedPas.add(key);
-
-      if (pa.infoCR) {
-        for (const icr of pa.infoCR) {
-          if (icr.pensoes) {
-            for (const p of icr.pensoes) totalPensao = totalPensao.plus(p.vlrDedPenAlim || 0);
-          }
-          if (icr.deducoesDependente) {
-            for (const d of icr.deducoesDependente) totalDependentes = totalDependentes.plus(d.vlrDedDep || 0);
-          }
-        }
-      }
-
-      if (pa.planosSaude) {
-        for (const ps of pa.planosSaude) {
-          totalPlanoSaude = totalPlanoSaude.plus(ps.vlrSaudeTit || 0);
-          if (ps.dependentes) {
-            for (const dps of ps.dependentes) totalPlanoSaude = totalPlanoSaude.plus(dps.vlrSaudeDep || 0);
-          }
-        }
-      }
-    }
 
     if (!eventoOrigemId) return null;
 

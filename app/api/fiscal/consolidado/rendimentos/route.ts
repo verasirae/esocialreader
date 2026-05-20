@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { FiscalEngine, FiscalNature, AuditEntry } from "@/lib/fiscal/engine";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -18,60 +19,103 @@ export async function GET(req: Request) {
       targetEmpresaId = emp?.id || "";
     }
 
-    const whereBase: any = {
-      empresaId: targetEmpresaId,
-    };
-
-    if (mes) {
-      whereBase.periodo = `${ano}-${mes}`;
-    } else {
-      whereBase.periodo = { startsWith: ano };
+    if (!targetEmpresaId) {
+      return NextResponse.json({ error: "Nenhuma empresa cadastrada ou informada." }, { status: 404 });
     }
 
-    // 1. Breakdown by Revenue Code (crMen) from S5002TotApurMen
-    const crBreakdown = await prisma.s5002TotApurMen.groupBy({
-      by: ["crMen"],
-      where: {
-        dmDev: {
-          s5002Evento: {
-            evento: {
-              empresaId: targetEmpresaId,
-              perApur: mes ? `${ano}-${mes}` : { startsWith: ano },
-              ativo: true
-            }
-          }
-        }
-      },
+    // 1. Build Single Source of Truth Audit Trail utilizing the FiscalEngine
+    const auditEntries = await FiscalEngine.buildAuditTrail(targetEmpresaId, ano, mes || undefined);
+
+    // 2. Compute crBreakdown and infoIRBreakdown dynamically from the audit trail
+    // This guarantees absolute consistency between raw listings and chart aggregations!
+    const crBreakdownMap = new Map<string, {
+      crMen: string;
       _sum: {
-        vlrRendTrib: true,
-        vlrRendTrib13: true,
-        vlrPrevOficial: true,
-        vlrPrevOficial13: true,
-        vlrCRMen: true,
-        vlrCR13Men: true,
+        vlrRendTrib: number;
+        vlrRendTrib13: number;
+        vlrPrevOficial: number;
+        vlrPrevOficial13: number;
+        vlrCRMen: number;
+        vlrCR13Men: number;
+      };
+    }>();
+
+    const infoIRBreakdownMap = new Map<string, {
+      tpInfoIR: string;
+      _sum: {
+        valor: number;
+      };
+    }>();
+
+    auditEntries.forEach((entry: AuditEntry) => {
+      // Process crBreakdown
+      const cr = entry.cr || "---";
+      const existingCR = crBreakdownMap.get(cr) || {
+        crMen: cr,
+        _sum: {
+          vlrRendTrib: 0,
+          vlrRendTrib13: 0,
+          vlrPrevOficial: 0,
+          vlrPrevOficial13: 0,
+          vlrCRMen: 0,
+          vlrCR13Men: 0,
+        }
+      };
+
+      if (entry.fiscalNature === FiscalNature.REND_TRIBUTAVEL) {
+        if (entry.codigoOficial === "12") {
+          existingCR._sum.vlrRendTrib13 += entry.valor;
+        } else {
+          existingCR._sum.vlrRendTrib += entry.valor;
+        }
+      } else if (entry.fiscalNature === FiscalNature.PREVIDENCIA_OFICIAL) {
+        if (entry.codigoOficial === "32") {
+          existingCR._sum.vlrPrevOficial13 += entry.valor;
+        } else {
+          existingCR._sum.vlrPrevOficial += entry.valor;
+        }
+      } else if (entry.fiscalNature === FiscalNature.IRRF_RETIDO) {
+        if (entry.codigoOficial === "IRRF_13") {
+          existingCR._sum.vlrCR13Men += entry.valor;
+        } else {
+          existingCR._sum.vlrCRMen += entry.valor;
+        }
+      }
+
+      crBreakdownMap.set(cr, existingCR);
+
+      // Process infoIRBreakdown
+      if (entry.origemTabela === "s5002_info_ir") {
+        const infoCode = entry.codigoOficial;
+        const existingInfo = infoIRBreakdownMap.get(infoCode) || {
+          tpInfoIR: infoCode,
+          _sum: { valor: 0 }
+        };
+        existingInfo._sum.valor += entry.valor;
+        infoIRBreakdownMap.set(infoCode, existingInfo);
       }
     });
 
-    // 2. Breakdown by Type of Info IR (tpInfoIR) from S5002InfoIR
-    const infoIRBreakdown = await prisma.s5002InfoIR.groupBy({
-      by: ["tpInfoIR"],
-      where: {
-        dmDev: {
-          s5002Evento: {
-            evento: {
-              empresaId: targetEmpresaId,
-              perApur: mes ? `${ano}-${mes}` : { startsWith: ano },
-              ativo: true
-            }
-          }
-        }
-      },
+    const crBreakdown = Array.from(crBreakdownMap.values()).map(v => ({
+      crMen: v.crMen,
       _sum: {
-        valor: true
+        vlrRendTrib: v._sum.vlrRendTrib,
+        vlrRendTrib13: v._sum.vlrRendTrib13,
+        vlrPrevOficial: v._sum.vlrPrevOficial,
+        vlrPrevOficial13: v._sum.vlrPrevOficial13,
+        vlrCRMen: v._sum.vlrCRMen,
+        vlrCR13Men: v._sum.vlrCR13Men,
       }
-    });
+    }));
 
-    // 3. Totals from Consolidated Table (for consistency)
+    const infoIRBreakdown = Array.from(infoIRBreakdownMap.values()).map(v => ({
+      tpInfoIR: v.tpInfoIR,
+      _sum: {
+        valor: v._sum.valor
+      }
+    }));
+
+    // 3. Keep aggregates of the annual consolidations
     const totalsAnual = await prisma.s5002ConsolidadoAnual.aggregate({
       where: {
         empresaId: targetEmpresaId,
@@ -88,13 +132,38 @@ export async function GET(req: Request) {
       }
     });
 
+    // 4. Validate Fiscal Integrity & Persist Divergences
+    const fiscalWarnings = await FiscalEngine.validateFiscalIntegrity(targetEmpresaId, ano, auditEntries);
+    
+    // Clear old warnings for this scope (simulated by deleting un-resolved FISCAL warnings to avoid flooding)
+    await prisma.divergenciaFiscal.deleteMany({
+      where: {
+        resolvido: false,
+        tipo: { in: ["FISCAL_WARNING", "FISCAL_ALERT", "CONSOLIDADO_DIVERGENCE"] }
+      }
+    });
+
+    // Save active discrepancies
+    for (const d of fiscalWarnings) {
+      await prisma.divergenciaFiscal.create({
+        data: {
+          tipo: d.tipo,
+          descricao: d.descricao,
+          severidade: d.severidade,
+          resolvido: false
+        }
+      });
+    }
+
     return NextResponse.json({
       crBreakdown,
       infoIRBreakdown,
+      auditEntries,
+      divergencias: fiscalWarnings,
       totals: totalsAnual._sum
     });
   } catch (err) {
-    console.error(err);
+    console.error("[GET Rendimentos API] Error:", err);
     return NextResponse.json({ error: "Erro ao buscar rendimentos" }, { status: 500 });
   }
 }

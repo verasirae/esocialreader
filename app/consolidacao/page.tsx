@@ -7,6 +7,8 @@ import {
   Search, 
   FileDown, 
   ChevronRight,
+  ChevronLeft,
+  ChevronDown,
   Loader2,
   CalendarDays,
   Home,
@@ -351,9 +353,22 @@ function DetailedConsolidationView({
         message: "Devido à ausência de alguns meses de apuração no ano, os trabalhadores listados podem apresentar demonstrativos incompletos."
       });
     }
+
+    // 4. Integração de Divergências Fiscais do Motor S-5002
+    if (rendimentosData?.divergencias) {
+      rendimentosData.divergencias.forEach((d: any, index: number) => {
+        list.push({
+          id: `fiscal-engine-warning-${index}`,
+          tab: "Rendimentos e retenções",
+          severity: d.severidade === "CRITICA" || d.severidade === "ALTA" ? "error" : "warning",
+          title: `Inconsistência Fiscal: ${d.tipo}`,
+          message: d.descricao
+        });
+      });
+    }
     
     return list;
-  }, [yearData, selectedYear, months]);
+  }, [yearData, selectedYear, months, rendimentosData]);
 
   return (
     <motion.div 
@@ -586,97 +601,162 @@ function DetailedConsolidationView({
                 </div>
               )}
             </div>
-            
-            <div className="p-6 pt-0">
-              <div className="border-t border-outline-variant pt-6">
-                <h3 className="text-sm font-bold text-on-surface mb-6 flex items-center gap-2">
-                  Painel de críticas
-                  {audits.length > 0 && <span className="bg-error text-white text-[9px] px-1.5 py-0.5 rounded-full">{audits.length}</span>}
-                </h3>
-                
-                {audits.length > 0 ? (
-                  <div className="flex flex-col gap-3">
-                    {audits.map((audit) => (
-                      <div 
-                        key={audit.id}
-                        className={cn(
-                          "p-4 rounded-sm border flex items-start gap-3",
-                          audit.severity === "error" ? "bg-error/5 border-error/20" : "bg-warning/5 border-warning/20"
-                        )}
-                      >
-                        <AlertCircle size={16} className={cn("mt-0.5", audit.severity === "error" ? "text-error" : "text-warning")} />
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-on-surface">{audit.title}</span>
-                            <span className="bg-outline-variant text-secondary text-[8px] px-1 rounded uppercase font-black uppercase tracking-widest">{audit.tab}</span>
-                          </div>
-                          <p className="text-[10px] text-secondary leading-relaxed">{audit.message}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-10 text-secondary text-xs">
-                    Não foram encontradas divergências no processamento dos eventos enviados.
-                  </div>
-                )}
-              </div>
-            </div>
           </>
         ) : (
           <BeneficiariosDetailedView data={yearData} onBack={() => setIsBeneficiariosDetailed(false)} />
         )}
+
+        <div className="p-6 pt-0">
+          <div className="border-t border-outline-variant pt-6">
+            <h3 className="text-sm font-bold text-on-surface mb-6 flex items-center gap-2">
+              Painel de críticas
+              {audits.length > 0 && <span className="bg-error text-white text-[9px] px-1.5 py-0.5 rounded-full">{audits.length}</span>}
+            </h3>
+            
+            {audits.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                {audits.map((audit) => (
+                  <div 
+                    key={audit.id}
+                    className={cn(
+                      "p-4 rounded-sm border flex items-start gap-3",
+                      audit.severity === "error" ? "bg-error/5 border-error/20" : "bg-warning/5 border-warning/20"
+                    )}
+                  >
+                    <AlertCircle size={16} className={cn("mt-0.5", audit.severity === "error" ? "text-error" : "text-warning")} />
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-on-surface">{audit.title}</span>
+                        <span className="bg-outline-variant text-secondary text-[8px] px-1 rounded uppercase font-black uppercase tracking-widest">{audit.tab}</span>
+                      </div>
+                      <p className="text-[10px] text-secondary leading-relaxed">{audit.message}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-10 text-secondary text-xs">
+                Não foram encontradas divergências no processamento dos eventos enviados.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </motion.div>
   );
 }
 
-function RendimentosTab({ data, selectedMonth, onBack }: any) {
-  const values = useMemo(() => {
-    if (!data) return null;
+import { FiscalNature } from "@/lib/fiscal/engine";
 
-    const findVal = (codes: string | string[]) => {
-      const codeList = Array.isArray(codes) ? codes : [codes];
-      const items = data.infoIRBreakdown?.filter((i: any) => 
-        codeList.some(c => i.tpInfoIR === c || i.tpInfoIR.startsWith(c))
-      );
-      return items?.reduce((acc: number, curr: any) => acc + Number(curr._sum.valor), 0) || 0;
+function RendimentosTab({ data, selectedMonth, onBack }: any) {
+  const [showAudit, setShowAudit] = useState(false);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditSearch, setAuditSearch] = useState("");
+  const [expandedWorkers, setExpandedWorkers] = useState<Record<string, boolean>>({});
+
+  const toggleWorker = (name: string) => {
+    setExpandedWorkers(prev => ({
+      ...prev,
+      [name]: !prev[name]
+    }));
+  };
+
+  const values = useMemo(() => {
+    if (!data?.auditEntries) return null;
+
+    const findValByNature = (nature: string) => {
+      return data.auditEntries
+        .filter((entry: any) => entry.fiscalNature === nature)
+        .reduce((acc: number, curr: any) => acc + curr.valor, 0);
     };
 
-    const rendTributaveis = findVal("11");
+    const rendTributaveis = findValByNature("REND_TRIBUTAVEL");
     
     // Deduções
-    const prevOficial = findVal(["31", "32"]);
-    const prevPrivada = findVal(["43", "53"]);
-    const fapi = findVal("47");
-    const funpresp = findVal("48");
-    const entePatrocinador = findVal("51");
-    const prevComplTotal = prevPrivada + fapi + funpresp + entePatrocinador;
+    const prevOficial = findValByNature("PREVIDENCIA_OFICIAL");
+    const prevComplTotal = findValByNature("PREVIDENCIA_COMPLEMENTAR");
+    const dependentes = findValByNature("DEPENDENTE");
+    const pensao = findValByNature("PENSAO");
+    const simplificado = findValByNature("SIMPLIFICADO");
+    const planoSaude = findValByNature("PLANO_SAUDE");
     
-    const dependentes = findVal("41");
-    const pensao = findVal("42");
-    const simplificado = findVal("14");
-    
+    // Sub-items of PREVIDENCIA_COMPLEMENTAR
+    const prevPrivada = data.auditEntries
+      .filter((entry: any) => 
+        entry.fiscalNature === "PREVIDENCIA_COMPLEMENTAR" && 
+        (["46", "47"].includes(entry.tpInfoIR) || entry.descricaoOficial?.toLowerCase().includes("privada") || entry.categoriaFiscal?.toLowerCase().includes("privada"))
+      )
+      .reduce((acc: number, curr: any) => acc + curr.valor, 0);
+
+    const fapi = data.auditEntries
+      .filter((entry: any) => 
+        entry.fiscalNature === "PREVIDENCIA_COMPLEMENTAR" && 
+        (["61", "62"].includes(entry.tpInfoIR) || entry.descricaoOficial?.toLowerCase().includes("fapi") || entry.categoriaFiscal?.toLowerCase().includes("fapi"))
+      )
+      .reduce((acc: number, curr: any) => acc + curr.valor, 0);
+
+    const funpresp = data.auditEntries
+      .filter((entry: any) => 
+        entry.fiscalNature === "PREVIDENCIA_COMPLEMENTAR" && 
+        (entry.tpInfoIR === "48" || entry.descricaoOficial?.toLowerCase().includes("funpresp") || entry.categoriaFiscal?.toLowerCase().includes("funpresp"))
+      )
+      .reduce((acc: number, curr: any) => acc + curr.valor, 0);
+
+    const entePublico = data.auditEntries
+      .filter((entry: any) => 
+        entry.fiscalNature === "PREVIDENCIA_COMPLEMENTAR" && 
+        (["63", "64"].includes(entry.tpInfoIR) || entry.descricaoOficial?.toLowerCase().includes("patrocinador") || entry.descricaoOficial?.toLowerCase().includes("fundação") || entry.categoriaFiscal?.toLowerCase().includes("ente público") || entry.categoriaFiscal?.toLowerCase().includes("patrocinador"))
+      )
+      .reduce((acc: number, curr: any) => acc + curr.valor, 0);
+
+    const sumSubComp = prevPrivada + fapi + funpresp + entePublico;
+    const prevPrivadaFinal = sumSubComp < prevComplTotal ? prevPrivada + (prevComplTotal - sumSubComp) : prevPrivada;
+
     const totalDeducoes = prevOficial + prevComplTotal + dependentes + pensao + simplificado;
 
-    const isentos = {
-      parcelaIsenta65: findVal("70"),
-      diarias: findVal("61"),
-      ajudaCusto: findVal("62"),
-      indenizacaoPdv: findVal("63"),
-      abonoPecuniario: findVal("64"),
-      lucrosDividendos: findVal("67"),
-      valoresMe: findVal("71"),
-      complementacao89: findVal("72"),
-      resgateMolestia: findVal("73"),
-      pensaoMolestia: findVal("74"),
-      jurosMora: findVal("75"),
-      bolsaResidente: 0,
-      outros: findVal(["79", "7900"]),
-      auxilioMoradia: findVal("80"),
+    const mapIsentoCodeToGroup = (code: string): string => {
+      const c = code.trim();
+      if (["70", "71", "ISENTO_65_ANOS"].includes(c)) return "ISENTO_65_ANOS";
+      if (["61", "72", "DIARIAS"].includes(c)) return "DIARIAS";
+      if (["62", "73", "AJUDA_CUSTO"].includes(c)) return "AJUDA_CUSTO";
+      if (["63", "74", "INDENIZACAO_PDV"].includes(c)) return "INDENIZACAO_PDV";
+      if (["64", "75", "ABONO_PECUNIARIO"].includes(c)) return "ABONO_PECUNIARIO";
+      if (["67", "78", "LUCROS_DIVIDENDOS"].includes(c)) return "LUCROS_DIVIDENDOS";
+      if (["71", "79", "VALORES_ME_EPP"].includes(c)) return "VALORES_ME_EPP";
+      if (["72", "COMPLEMENTACAO_89_95"].includes(c)) return "COMPLEMENTACAO_89_95";
+      if (["73", "RESGATE_MOLESTIA_GRAVE"].includes(c)) return "RESGATE_MOLESTIA_GRAVE";
+      if (["74", "PENSAO_MOLESTIA_GRAVE"].includes(c)) return "PENSAO_MOLESTIA_GRAVE";
+      if (["75", "JUROS_MORA"].includes(c)) return "JUROS_MORA";
+      if (["80", "700", "AUXILIO_MORADIA"].includes(c)) return "AUXILIO_MORADIA";
+      if (c === "BOLSA_RESIDENTE") return "BOLSA_RESIDENTE";
+      return "OUTROS_ISENTOS";
     };
 
-    const totalIsento = Object.values(isentos).reduce((acc, curr) => acc + curr, 0);
+    const isentos: any = {
+      ISENTO_65_ANOS: 0,
+      DIARIAS: 0,
+      AJUDA_CUSTO: 0,
+      INDENIZACAO_PDV: 0,
+      ABONO_PECUNIARIO: 0,
+      LUCROS_DIVIDENDOS: 0,
+      VALORES_ME_EPP: 0,
+      COMPLEMENTACAO_89_95: 0,
+      RESGATE_MOLESTIA_GRAVE: 0,
+      PENSAO_MOLESTIA_GRAVE: 0,
+      JUROS_MORA: 0,
+      BOLSA_RESIDENTE: 0,
+      AUXILIO_MORADIA: 0,
+      OUTROS_ISENTOS: 0
+    };
+
+    data.auditEntries
+      .filter((entry: any) => entry.fiscalNature === "ISENTO")
+      .forEach((entry: any) => {
+        const group = mapIsentoCodeToGroup(entry.codigoOficial);
+        isentos[group] = (isentos[group] || 0) + entry.valor;
+      });
+
+    const totalIsento = Object.values(isentos).reduce((acc: any, curr: any) => acc + curr, 0);
 
     return {
       rendimentosTributaveis: rendTributaveis,
@@ -684,21 +764,88 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
         total: totalDeducoes,
         previdenciaOficial: prevOficial,
         previdenciaComplementar: prevComplTotal,
-        privada: prevPrivada,
+        previdenciaPrivada: prevPrivadaFinal,
         fapi: fapi,
         funpresp: funpresp,
-        entePublico: entePatrocinador,
+        entePublico: entePublico,
         dependentes: dependentes,
         pensao: pensao,
         simplificado: simplificado,
+        planoSaude: planoSaude,
       },
-      impostoRetido: Number(data.totals?.vlrIrrf || 0),
+      impostoRetido: findValByNature("IRRF_RETIDO"),
       rendimentosIsentos: {
         total: totalIsento,
         ...isentos
       }
     };
   }, [data]);
+
+  const groupedWorkers = useMemo(() => {
+    if (!data?.auditEntries) return [];
+
+    const groups: Record<string, any[]> = {};
+    data.auditEntries.forEach((entry: any) => {
+      const name = entry.trabalhador || "Não Identificado";
+      if (!groups[name]) {
+        groups[name] = [];
+      }
+      groups[name].push(entry);
+    });
+
+    return Object.entries(groups).map(([name, entries]) => {
+      const activeEntries = entries.filter((e: any) => e.incluido !== false);
+      const totalConsolidado = activeEntries.reduce((sum, e) => sum + e.valor, 0);
+      
+      const inactiveEntries = entries.filter((e: any) => e.incluido === false);
+      const totalExcluido = inactiveEntries.reduce((sum, e) => sum + (e.valorOriginal || e.valor || 0), 0);
+
+      const sortedEntries = [...entries].sort((a, b) => {
+        if (a.incluido !== b.incluido) {
+          return a.incluido ? -1 : 1;
+        }
+        return (a.tpCR || "").localeCompare(b.tpCR || "");
+      });
+
+      return {
+        name,
+        entries: sortedEntries,
+        count: entries.length,
+        totalConsolidado,
+        totalExcluido,
+        hasDuplicates: entries.some((e: any) => e.incluido === false)
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [data]);
+
+  const filteredWorkers = useMemo(() => {
+    if (!auditSearch.trim()) return groupedWorkers;
+    const s = auditSearch.toLowerCase();
+    return groupedWorkers.filter(w => w.name.toLowerCase().includes(s));
+  }, [groupedWorkers, auditSearch]);
+
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(filteredWorkers.length / itemsPerPage) || 1;
+  const paginatedWorkers = useMemo(() => {
+    const start = (auditPage - 1) * itemsPerPage;
+    return filteredWorkers.slice(start, start + itemsPerPage);
+  }, [filteredWorkers, auditPage, itemsPerPage]);
+
+  useEffect(() => {
+    if (auditPage > totalPages) {
+      setAuditPage(1);
+    }
+  }, [totalPages, auditPage]);
+
+  const toggleAllWorkers = (expand: boolean) => {
+    const next: Record<string, boolean> = {};
+    if (expand) {
+      filteredWorkers.forEach(w => {
+        next[w.name] = true;
+      });
+    }
+    setExpandedWorkers(next);
+  };
 
   const CurrencyRow = ({ label, value, indent = 0, isBold = false }: any) => (
     <div 
@@ -733,15 +880,256 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
           Rendimentos, deduções e retenções
           <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
         </button>
+        <button 
+          onClick={() => setShowAudit(!showAudit)}
+          className="text-[10px] font-bold bg-primary/10 text-primary px-3 py-1 rounded-full hover:bg-primary/20 transition-all flex items-center gap-1"
+        >
+          {showAudit ? "OCULTAR AUDITORIA" : "VER TRILHA DE AUDITORIA"}
+          <ShieldCheck size={12} />
+        </button>
       </div>
       
+      {showAudit && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="border-x border-b border-outline-variant bg-surface-container-lowest overflow-hidden flex flex-col"
+        >
+          {/* Header & Controls bar */}
+          <div className="p-4 bg-primary/5 border-b border-outline-variant flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h4 className="text-[11px] font-bold text-primary flex items-center gap-2">
+                <ShieldCheck size={14} />
+                Trilha de Auditoria Fiscal & Governança S-5002 / Receita Federal
+              </h4>
+              <p className="text-[9px] text-secondary mt-1">Classificação baseada em tpCR, tpInfoIR e regras de precedência e deduplicação do motor fiscal.</p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Search input */}
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                  <span className="text-secondary opacity-60"><Search size={11} /></span>
+                </span>
+                <input
+                  type="text"
+                  placeholder="Filtrar trabalhador..."
+                  className="text-[9px] pl-7 pr-3 py-1.5 w-[180px] bg-white border border-outline-variant rounded-sm focus:outline-none focus:border-primary/50 text-on-surface"
+                  value={auditSearch}
+                  onChange={(e) => {
+                    setAuditSearch(e.target.value);
+                    setAuditPage(1);
+                  }}
+                />
+              </div>
+
+              {/* Expand / Collapse All buttons */}
+              <div className="flex gap-1">
+                <button 
+                  onClick={() => toggleAllWorkers(true)}
+                  className="bg-primary/5 hover:bg-primary/10 text-primary border border-primary/20 text-[8px] font-bold px-2.5 py-1.5 rounded-sm transition-all cursor-pointer"
+                >
+                  Expandir Todos
+                </button>
+                <button 
+                  onClick={() => toggleAllWorkers(false)}
+                  className="bg-outline-variant/30 hover:bg-outline-variant/60 text-secondary border border-outline-variant/55 text-[8px] font-bold px-2.5 py-1.5 rounded-sm transition-all cursor-pointer"
+                >
+                  Recolher Todos
+                </button>
+              </div>
+
+              <div className="flex gap-1.5 text-[8px] font-bold">
+                <span className="flex items-center gap-1 bg-green-50 border border-green-200 text-green-700 px-1.5 py-1 rounded-sm">
+                  ● ATIVO
+                </span>
+                <span className="flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 px-1.5 py-1 rounded-sm">
+                  ● EXCLUÍDO
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Workers list & Collasibles container */}
+          <div className="p-4 flex flex-col gap-2 bg-surface-container/5">
+            {paginatedWorkers.length === 0 ? (
+              <div className="text-center py-8 text-secondary text-[10px] italic">
+                Nenhum trabalhador encontrado com o termo filtrado.
+              </div>
+            ) : (
+              paginatedWorkers.map((worker) => {
+                const isExpanded = !!expandedWorkers[worker.name];
+                return (
+                  <div 
+                    key={worker.name} 
+                    className="border border-outline-variant/60 rounded-sm overflow-hidden bg-white hover:border-primary/20 transition-colors shadow-sm animate-fade-in"
+                  >
+                    {/* Worker Header (Click to toggle) */}
+                    <div 
+                      onClick={() => toggleWorker(worker.name)}
+                      className="flex flex-wrap items-center justify-between p-3 cursor-pointer select-none bg-surface-container-lowest hover:bg-primary/5 transition-all gap-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="p-1 rounded-sm bg-surface-container hover:bg-surface-container-high transition-colors">
+                          <ChevronRight 
+                            size={12} 
+                            className={cn("text-secondary transition-transform duration-200", isExpanded && "rotate-90")} 
+                          />
+                        </span>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-[10px] text-on-surface uppercase tracking-tight">{worker.name}</span>
+                          <span className="text-[8px] text-secondary">
+                            {worker.count} {worker.count === 1 ? 'registro' : 'registros'} na trilha
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-end text-right">
+                          <span className="text-[10px] font-extrabold text-primary">
+                            R$ {worker.totalConsolidado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[8px] text-secondary font-medium uppercase tracking-wider">Consolidado</span>
+                        </div>
+                        
+                        {worker.totalExcluido > 0 && (
+                          <div className="flex flex-col items-end text-right">
+                            <span className="text-[10px] font-bold text-red-500 line-through">
+                              R$ {worker.totalExcluido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-[8px] text-red-600 font-extrabold uppercase tracking-wider">Excluído</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Detailed worker entries (Collapsible section) */}
+                    <AnimatePresence initial={false}>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="border-t border-outline-variant overflow-y-auto max-h-[380px] bg-surface-container-lowest relative"
+                        >
+                          <table className="w-full text-left text-[9px] relative">
+                            <thead className="bg-white border-b border-outline-variant font-bold text-secondary uppercase tracking-tighter sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
+                              <tr>
+                                <th className="p-2 bg-white">tpCR</th>
+                                <th className="p-2 bg-white">tpInfoIR</th>
+                                <th className="p-2 bg-white">Natureza Fiscal</th>
+                                <th className="p-2 text-right bg-white">Valor Final</th>
+                                <th className="p-2 bg-white">Status / Regra Aplicada</th>
+                                <th className="p-2 bg-white">Origem XML</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {worker.entries.map((entry: any, i: number) => (
+                                <tr key={i} className={cn(
+                                  "border-b border-outline-variant/20 hover:bg-primary/5 transition-colors",
+                                  !entry.incluido ? "bg-red-50/20 text-secondary" : ""
+                                )}>
+                                  <td className="p-2 font-mono text-secondary font-medium">{entry.tpCR}</td>
+                                  <td className="p-2 font-mono text-secondary">{entry.tpInfoIR || "-"}</td>
+                                  <td className="p-2 font-semibold">
+                                    <span className="bg-primary/5 border border-primary/10 text-primary px-1.5 py-0.5 rounded-sm text-[8px]">
+                                      {entry.fiscalNature || "OUTROS"}
+                                    </span>
+                                  </td>
+                                  <td className="p-2 text-right font-mono font-bold">
+                                    {entry.incluido ? (
+                                      <span className="text-on-surface">
+                                        R$ {entry.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                      </span>
+                                    ) : (
+                                      <div className="flex flex-col items-end">
+                                        <span className="line-through text-red-500 opacity-70 text-[8px]">
+                                          R$ {entry.valorOriginal?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                        </span>
+                                        <span className="text-red-600 font-extrabold text-[8px]">R$ 0,00</span>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2 max-w-[250px]">
+                                    {!entry.incluido ? (
+                                      <div className="flex flex-col gap-0.5 text-[8px]">
+                                        <span className="text-red-600 font-bold flex items-center gap-0.5">
+                                          🚫 {entry.regraAplicada || "Excluído"}
+                                        </span>
+                                        <span className="text-secondary opacity-80 leading-normal block">
+                                          {entry.motivoExclusao}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-col gap-0.5 text-[8px]">
+                                        <span className="text-green-600 font-bold flex items-center gap-0.5">
+                                          ✓ {entry.regraAplicada || "Consolidado"}
+                                        </span>
+                                        <span className="text-secondary opacity-80 leading-normal block">
+                                          {entry.motivoInclusao}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2 italic text-secondary/70 truncate max-w-[150px] font-mono" title={entry.origemXml}>
+                                    {entry.origemXml || entry.origem}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Pagination bar */}
+          {totalPages > 1 && (
+            <div className="p-3 bg-primary/5 border-t border-outline-variant flex flex-col md:flex-row items-center justify-between gap-2 text-[10px]">
+              <span className="text-secondary text-[9px]">
+                Exibindo <strong className="text-primary">{(auditPage - 1) * itemsPerPage + 1}-{Math.min(filteredWorkers.length, auditPage * itemsPerPage)}</strong> de <strong className="text-primary">{filteredWorkers.length}</strong> trabalhadores
+              </span>
+              
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={auditPage === 1}
+                  onClick={() => setAuditPage(prev => Math.max(1, prev - 1))}
+                  className="p-1 px-2 border border-outline-variant rounded-sm bg-white hover:bg-surface-container-low transition-all disabled:opacity-40 disabled:hover:bg-white flex items-center gap-1 font-bold text-[9px] text-secondary disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={10} />
+                  Anterior
+                </button>
+                
+                <span className="px-3 py-1 font-medium text-secondary">
+                  Página {auditPage} de {totalPages}
+                </span>
+                
+                <button
+                  disabled={auditPage === totalPages}
+                  onClick={() => setAuditPage(prev => Math.min(totalPages, prev + 1))}
+                  className="p-1 px-2 border border-outline-variant rounded-sm bg-white hover:bg-surface-container-low transition-all disabled:opacity-40 disabled:hover:bg-white flex items-center gap-1 font-bold text-[9px] text-secondary disabled:cursor-not-allowed"
+                >
+                  Próximo
+                  <ChevronRight size={10} />
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
+
       <div className="border-x border-b border-outline-variant overflow-hidden bg-white">
         <CurrencyRow label="Rendimentos tributáveis" value={values.rendimentosTributaveis} isBold />
         
         <CurrencyRow label="Deduções" value={values.deducoes.total} isBold />
         <CurrencyRow label="Previdência oficial" value={values.deducoes.previdenciaOficial} indent={1} />
         <CurrencyRow label="Previdência complementar" value={values.deducoes.previdenciaComplementar} indent={1} />
-        <CurrencyRow label="Previdência privada" value={values.deducoes.privada} indent={2} />
+        <CurrencyRow label="Previdência privada" value={values.deducoes.previdenciaPrivada} indent={2} />
         <CurrencyRow label="FAPI" value={values.deducoes.fapi} indent={2} />
         <CurrencyRow label="FUNPRESP" value={values.deducoes.funpresp} indent={2} />
         <CurrencyRow label="Ente público patrocinador" value={values.deducoes.entePublico} indent={2} />
@@ -752,20 +1140,20 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
         <CurrencyRow label="Imposto retido" value={values.impostoRetido} isBold />
 
         <CurrencyRow label="Rendimentos isentos" value={values.rendimentosIsentos.total} isBold />
-        <CurrencyRow label="Parcela isenta aposentadoria acima de 65 anos" value={values.rendimentosIsentos.parcelaIsenta65} indent={1} />
-        <CurrencyRow label="Diárias" value={values.rendimentosIsentos.diarias} indent={1} />
-        <CurrencyRow label="Ajuda de custo" value={values.rendimentosIsentos.ajudaCusto} indent={1} />
-        <CurrencyRow label="Indenização e rescisão de contrato (PDV)" value={values.rendimentosIsentos.indenizacaoPdv} indent={1} />
-        <CurrencyRow label="Abono pecuniário" value={values.rendimentosIsentos.abonoPecuniario} indent={1} />
-        <CurrencyRow label="Lucros e dividendos pagos a partir de 1996" value={values.rendimentosIsentos.lucrosDividendos} indent={1} />
-        <CurrencyRow label="Valores pagos a titular ou sócio de ME ou EPP" value={values.rendimentosIsentos.valoresMe} indent={1} />
-        <CurrencyRow label="Complementação de aposentadoria - contribuição de 1989 a 1995 - IN 1.343/2013" value={values.rendimentosIsentos.complementacao89} indent={1} />
-        <CurrencyRow label="Resgate de previdência complementar por portador de moléstia grave" value={values.rendimentosIsentos.resgateMolestia} indent={1} />
-        <CurrencyRow label="Pensão, aposentadoria ou reforma por moléstia grave" value={values.rendimentosIsentos.pensaoMolestia} indent={1} />
-        <CurrencyRow label="Juros de mora pagos, devidos pelo atraso no pagamento de remuneração" value={values.rendimentosIsentos.jurosMora} indent={1} />
-        <CurrencyRow label="Bolsa de estudo recebida por médico residente" value={values.rendimentosIsentos.bolsaResidente} indent={1} />
-        <CurrencyRow label="Outros" value={values.rendimentosIsentos.outros} indent={1} />
-        <CurrencyRow label="Auxílio moradia" value={values.rendimentosIsentos.auxilioMoradia} indent={1} />
+        <CurrencyRow label="Parcela isenta aposentadoria acima de 65 anos" value={values.rendimentosIsentos.ISENTO_65_ANOS} indent={1} />
+        <CurrencyRow label="Diárias" value={values.rendimentosIsentos.DIARIAS} indent={1} />
+        <CurrencyRow label="Ajuda de custo" value={values.rendimentosIsentos.AJUDA_CUSTO} indent={1} />
+        <CurrencyRow label="Indenização e rescisão de contrato (PDV)" value={values.rendimentosIsentos.INDENIZACAO_PDV} indent={1} />
+        <CurrencyRow label="Abono pecuniário" value={values.rendimentosIsentos.ABONO_PECUNIARIO} indent={1} />
+        <CurrencyRow label="Lucros e dividendos pagos a partir de 1996" value={values.rendimentosIsentos.LUCROS_DIVIDENDOS} indent={1} />
+        <CurrencyRow label="Valores pagos a titular ou sócio de ME ou EPP" value={values.rendimentosIsentos.VALORES_ME_EPP} indent={1} />
+        <CurrencyRow label="Complementação de aposentadoria - contribuição de 1989 a 1995 - IN 1.343/2013" value={values.rendimentosIsentos.COMPLEMENTACAO_89_95} indent={1} />
+        <CurrencyRow label="Resgate de previdência complementar por portador de moléstia grave" value={values.rendimentosIsentos.RESGATE_MOLESTIA_GRAVE} indent={1} />
+        <CurrencyRow label="Pensão, aposentadoria ou reforma por moléstia grave" value={values.rendimentosIsentos.PENSAO_MOLESTIA_GRAVE} indent={1} />
+        <CurrencyRow label="Juros de mora pagos, devidos pelo atraso no pagamento de remuneração" value={values.rendimentosIsentos.JUROS_MORA} indent={1} />
+        <CurrencyRow label="Bolsa de estudo recebida por médico residente" value={values.rendimentosIsentos.BOLSA_RESIDENTE} indent={1} />
+        <CurrencyRow label="Outros" value={values.rendimentosIsentos.OUTROS_ISENTOS} indent={1} />
+        <CurrencyRow label="Auxílio moradia" value={values.rendimentosIsentos.AUXILIO_MORADIA} indent={1} />
 
         <CurrencyRow label="Despesas com ação judicial" value={0} isBold />
       </div>
@@ -775,27 +1163,57 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
 
 function RendimentosSummaryTab({ data, isLoading, onShowDetail }: any) {
   const summaryRows = useMemo(() => {
-    if (!data?.crBreakdown) return [];
+    if (!data?.auditEntries) return [];
     
-    const codeLabels: any = {
-      "0561": "0561 - Rendimentos do Trabalho Assalariado",
-      "0581": "0581 - Rendimentos do Trabalho Assalariado",
-      "0588": "0588 - Trabalho sem vínculo empregatício",
-      "1708": "1708 - Serviços profissionais prestados por PJ",
-      "5952": "5952 - Retenções de Contribuições (CSLL, PIS, COFINS)",
-      "595207": "5952-07 - Retenções de Contribuições (PJ a PJ)",
-      "056107": "0561-07 - Rendimentos do Trabalho Assalariado Pais/Mãe",
-      "056108": "0561-08 - IRRF - Trabalho assalariado no país e no exterior",
+    const codeLabels: Record<string, string> = {
+      "0561": "0561 - Rendimentos do trabalho assalariado",
+      "0581": "0581 - Rendimentos do trabalho assalariado (Exterior)",
+      "0588": "0588 - Rendimentos do trabalho sem vínculo empregatício",
+      "1708": "1708 - Remuneração de serviços profissionais prestados por pessoa jurídica",
+      "5952": "5952 - Retenções de contribuições pagamento PJ a PJ de direito privado",
+      "3562": "3562 - Participação dos trabalhadores em Lucros ou Resultados (PLR)",
+      "3533": "3533 - Proventos de aposentadoria, reserva, reforma ou pensão pagos por previdência pública",
+      "1889": "1889 - Rendimentos recebidos acumuladamente",
     };
 
-    return data.crBreakdown.map((item: any) => ({
-      code: codeLabels[item.crMen] || `${item.crMen} - Outros rendimentos`,
-      tributavel: Number(item._sum.vlrRendTrib || 0) + Number(item._sum.vlrRendTrib13 || 0),
-      deducoes: Number(item._sum.vlrPrevOficial || 0) + Number(item._sum.vlrPrevOficial13 || 0),
-      irrf: Number(item._sum.vlrCRMen || 0) + Number(item._sum.vlrCR13Men || 0),
-      isento: 0, 
-      acao: 0
-    }));
+    // Group by the 4-digit base of the Revenue Code (tpCR)
+    const grouped = new Map<string, any>();
+
+    data.auditEntries.forEach((entry: any) => {
+      let rawCr = entry.tpCR || "0561";
+      if (rawCr.includes("-")) {
+        rawCr = rawCr.replace("-", "");
+      }
+      let baseCr = rawCr.substring(0, 4);
+      if (!/^\d{4}$/.test(baseCr)) {
+        baseCr = "0561";
+      }
+
+      const existing = grouped.get(baseCr) || { 
+        code: codeLabels[baseCr] || `${baseCr} - Outros rendimentos`,
+        tributavel: 0, 
+        deducoes: 0, 
+        irrf: 0, 
+        isento: 0, 
+        acao: 0 
+      };
+
+      const nature = entry.fiscalNature;
+      
+      if (nature === "REND_TRIBUTAVEL") {
+        existing.tributavel += entry.valor;
+      } else if (["PREVIDENCIA_OFICIAL", "PREVIDENCIA_COMPLEMENTAR", "DEPENDENTE", "PENSAO", "PLANO_SAUDE", "SIMPLIFICADO"].includes(nature)) {
+        existing.deducoes += entry.valor;
+      } else if (nature === "IRRF_RETIDO") {
+        existing.irrf += entry.valor;
+      } else if (nature === "ISENTO") {
+        existing.isento += entry.valor;
+      }
+
+      grouped.set(baseCr, existing);
+    });
+
+    return Array.from(grouped.values());
   }, [data]);
 
   const total = useMemo(() => {

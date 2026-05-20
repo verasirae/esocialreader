@@ -80,19 +80,27 @@ export default function TablesViewPage() {
                 key={table.id}
                 onClick={() => setActiveTable(table.id)}
                 className={cn(
-                  "w-full text-left p-4 rounded-lg flex flex-col gap-1 transition-all group",
+                  "w-full text-left p-4 rounded-lg flex flex-col gap-1 transition-all duration-300 group",
                   activeTable === table.id 
-                    ? "bg-primary text-on-primary shadow-lg shadow-primary/20" 
-                    : "hover:bg-surface-container-high"
+                    ? "bg-primary text-white shadow-lg shadow-primary/25 scale-[1.01]" 
+                    : "hover:bg-surface-container-high text-on-surface"
                 )}
               >
                 <div className="flex justify-between items-center">
-                   <span className={cn("text-[10px] font-black uppercase tracking-widest", activeTable === table.id ? "text-white opacity-80" : "text-primary")}>
+                   <span className={cn(
+                     "text-[10px] font-black uppercase tracking-widest transition-colors duration-300", 
+                     activeTable === table.id ? "text-white/80" : "text-primary"
+                   )}>
                       {table.name}
                    </span>
-                   {activeTable === table.id && <div className="w-1.5 h-1.5 rounded-full bg-on-primary animate-pulse" />}
+                   {activeTable === table.id && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
                 </div>
-                <span className="text-xs font-bold leading-tight">{table.fullName}</span>
+                <span className={cn(
+                  "text-xs font-bold leading-tight transition-colors duration-300",
+                  activeTable === table.id ? "text-white" : "text-on-surface-variant group-hover:text-on-surface"
+                )}>
+                  {table.fullName}
+                </span>
               </button>
            ))}
         </div>
