@@ -12,6 +12,7 @@ import {
   ChevronDown
 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
+import { safeJsonFetch } from "@/lib/utils";
 
 export default function OperadorasPage() {
   const [operadorasData, setOperadorasData] = useState<any[]>([]);
@@ -38,10 +39,8 @@ export default function OperadorasPage() {
   const fetchOperadorasData = async (page: number, search: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/esocial/operadoras?page=${page}&search=${search}`);
-      if (!res.ok) throw new Error("Erro ao carregar operadoras");
-      const result = await res.json();
-      if (result.data) {
+      const result = await safeJsonFetch(`/api/esocial/operadoras?page=${page}&search=${search}`);
+      if (result && result.data) {
         setOperadorasData(result.data);
         setTotalItems(result.total);
       }

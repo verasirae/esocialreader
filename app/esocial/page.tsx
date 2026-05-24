@@ -225,18 +225,20 @@ function EsocialTablesContent() {
     let errorFiles = 0;
 
     try {
-      for (let i = 0; i < files.length; i++) {
+      for (const file of Array.from(files)) {
         const formData = new FormData();
-        formData.append("files", files[i]);
-        
-        const data = await safeJsonFetch("/api/esocial/s5002/import", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (data && data.success) {
-          successFiles++;
-        } else {
+        formData.append("files", file);
+        try {
+          const data = await safeJsonFetch("/api/esocial/s5002/import", {
+            method: "POST",
+            body: formData,
+          });
+          if (data && data.success) {
+            successFiles++;
+          } else {
+            errorFiles++;
+          }
+        } catch (err) {
           errorFiles++;
         }
       }
@@ -1308,14 +1310,15 @@ function EsocialTablesContent() {
                 <span>Atualizar Auditoria</span>
               </button>
               <button 
+                type="button"
                 className="btn-primary flex items-center gap-2 py-2 px-6 shadow-lg shadow-primary/20 text-xs font-bold disabled:opacity-50"
                 onClick={() => document.getElementById("s5002-upload")?.click()}
                 disabled={isUploading}
               >
                 <CloudUpload size={14} />
                 <span>{isUploading ? "Aguarde..." : "Importar Novos XMLs"}</span>
-                <input id="s5002-upload" type="file" multiple className="hidden" accept=".xml" onChange={handleS5002Upload} />
               </button>
+              <input id="s5002-upload" type="file" multiple className="hidden" accept=".xml" onChange={handleS5002Upload} />
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -1871,8 +1874,8 @@ function EsocialTablesContent() {
                       <p className="text-white font-bold text-xs uppercase tracking-widest">Soltar CSV aqui</p>
                       <p className="text-white/40 text-[9px] font-black uppercase mt-1">Ou clique para buscar</p>
                     </div>
-                    <input id="footer-upload" type="file" className="hidden" onChange={(e) => handleFileUpload(e, "54")} />
                 </div>
+                <input id="footer-upload" type="file" className="hidden" onChange={(e) => handleFileUpload(e, "54")} />
             </div>
           </div>
         </div>
@@ -1936,11 +1939,11 @@ function EsocialTablesContent() {
             <Download size={16} />
             <span>Exportar Tudo</span>
           </button>
-          <button className="btn-primary flex items-center gap-2" onClick={() => document.getElementById("header-upload")?.click()}>
+          <button type="button" className="btn-primary flex items-center gap-2" onClick={() => document.getElementById("header-upload")?.click()}>
             <Plus size={16} />
             <span>Importar CSV</span>
-            <input id="header-upload" type="file" className="hidden" onChange={(e) => handleFileUpload(e, selectedTable)} />
           </button>
+          <input id="header-upload" type="file" className="hidden" onChange={(e) => handleFileUpload(e, selectedTable)} />
         </div>
       </div>
 

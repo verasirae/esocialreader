@@ -84,7 +84,7 @@ export class ConsolidacaoFiscalService {
 
     const [ano, mes] = periodo.split("-");
     const auditEntries = await FiscalEngine.buildAuditTrail(empresaId, ano, mes, trabalhadorId);
-    const activeEntries = auditEntries.filter(e => e.incluido !== false);
+    const activeEntries = auditEntries.filter(e => e.incluido !== false && e.valorCompoeBase !== false);
 
     let totalRendTrib = new Decimal(0);
     let totalRendTrib13 = new Decimal(0);
@@ -193,7 +193,7 @@ export class ConsolidacaoFiscalService {
             hashConsolidacao: `CONS_${hashKey}_${periodo}_V${nextVersao}_${Date.now()}`,
             versao: nextVersao,
             ativo: true,
-            origemRetificacao: dmDevs.some(d => d.s5002Evento.evento.indRetif === 2) || periodosAnt.length > 0
+            origemRetificacao: dmDevs.some(d => d.s5002Evento.evento.indRetif === 2) || periodosAnt.some(pa => pa.s5002Evento.perApur !== pa.perRefAjuste)
           }
         });
       } catch (createErr: any) {

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { FiscalEngine, FiscalNature, AuditEntry } from "@/lib/fiscal/engine";
+import { fiscalCache } from "@/lib/fiscal/cache";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const ano = searchParams.get("ano");
   const mes = searchParams.get("mes");
   const empresaId = searchParams.get("empresaId");
+  const forceRefresh = searchParams.get("refresh") === "true";
 
   if (!ano) {
     return NextResponse.json({ error: "Ano é obrigatório" }, { status: 400 });
@@ -21,6 +23,15 @@ export async function GET(req: Request) {
 
     if (!targetEmpresaId) {
       return NextResponse.json({ error: "Nenhuma empresa cadastrada ou informada." }, { status: 404 });
+    }
+
+    // Check fiscalCache
+    const cacheKey = `${targetEmpresaId}_${ano}_${mes || "all"}`;
+    if (!forceRefresh) {
+      const cached = fiscalCache.get(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached);
+      }
     }
 
     // 1. Build Single Source of Truth Audit Trail utilizing the FiscalEngine
@@ -48,6 +59,9 @@ export async function GET(req: Request) {
     }>();
 
     auditEntries.forEach((entry: AuditEntry) => {
+      if (entry.incluido === false || entry.ativoFiscal === false || entry.valorCompoeBase === false) {
+        return;
+      }
       // Process crBreakdown
       const cr = entry.cr || "---";
       const existingCR = crBreakdownMap.get(cr) || {
@@ -69,7 +83,7 @@ export async function GET(req: Request) {
           existingCR._sum.vlrRendTrib += entry.valor;
         }
       } else if (entry.fiscalNature === FiscalNature.PREVIDENCIA_OFICIAL) {
-        if (entry.codigoOficial === "32") {
+        if (entry.codigoOficial === "42") {
           existingCR._sum.vlrPrevOficial13 += entry.valor;
         } else {
           existingCR._sum.vlrPrevOficial += entry.valor;
@@ -155,13 +169,17 @@ export async function GET(req: Request) {
       });
     }
 
-    return NextResponse.json({
+    const responseData = {
       crBreakdown,
       infoIRBreakdown,
       auditEntries,
       divergencias: fiscalWarnings,
       totals: totalsAnual._sum
-    });
+    };
+    
+    fiscalCache.set(cacheKey, responseData);
+
+    return NextResponse.json(responseData);
   } catch (err) {
     console.error("[GET Rendimentos API] Error:", err);
     return NextResponse.json({ error: "Erro ao buscar rendimentos" }, { status: 500 });

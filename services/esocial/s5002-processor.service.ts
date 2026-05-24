@@ -59,9 +59,25 @@ export class S5002ProcessorService {
         evento.cnpjRaiz || undefined
       );
 
+      // Colecionar todos os perAnts de forma dinâmica de todo o XML
+      const perAntList: { perRefAjuste: string; nrRec1210Orig?: string }[] = [];
+      const blocksForRetro = parsedData.infoIRComplemList && parsedData.infoIRComplemList.length > 0
+        ? parsedData.infoIRComplemList
+        : (parsedData.infoIRComplem ? [parsedData.infoIRComplem] : []);
+
+      for (const block of blocksForRetro) {
+        if (block.perAnt) {
+          if (Array.isArray(block.perAnt)) {
+            perAntList.push(...block.perAnt);
+          } else {
+            perAntList.push(block.perAnt);
+          }
+        }
+      }
+
       // 4.1. Se houver períodos anteriores (retroativos), consolidar cada um deles
-      if (parsedData.infoIRComplem?.perAnt) {
-        for (const p of parsedData.infoIRComplem.perAnt) {
+      if (perAntList.length > 0) {
+        for (const p of perAntList) {
           console.log(`[Processor] Detectado retroativo para ${p.perRefAjuste}. Re-consolidando...`);
           await consolidacaoFiscalService.consolidarTrabalhadorPeriodo(
             evento.trabalhadorId,
@@ -93,11 +109,11 @@ export class S5002ProcessorService {
       }
 
       // Se processou retroativos de outros anos, consolidar esses anos também
-      if (parsedData.infoIRComplem?.perAnt) {
+      if (perAntList.length > 0) {
         const anosProcessados = new Set<number>();
         anosProcessados.add(ano);
 
-        for (const p of parsedData.infoIRComplem.perAnt) {
+        for (const p of perAntList) {
           const anoRetro = parseInt(p.perRefAjuste.split("-")[0]);
           if (!anosProcessados.has(anoRetro)) {
             await consolidacaoFiscalService.consolidarAnoBase(

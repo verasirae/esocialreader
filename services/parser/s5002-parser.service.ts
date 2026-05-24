@@ -32,6 +32,15 @@ export class S5002ParserService {
     // Extraímos o CNPJ Raiz (8 primeiros dígitos se for CNPJ 14 ou o valor se for 8)
     const cnpjRaiz = normalizeCnpjRaiz(ideEmpregador?.nrInsc);
 
+    const rawComplem = ideTrabalhador.infoIRComplem;
+    const blocks = rawComplem 
+      ? this.ensureArray(rawComplem).map((b) => this.parseInfoIRComplemBlock(b))
+      : [];
+
+    const allPerAnt = blocks
+      .filter((b) => b.perAnt)
+      .map((b) => b.perAnt!);
+
     const result: S5002ParserResult = {
       eventoId: String(evt.Id || ""),
       perApur: String(ideEvento.perApur),
@@ -45,7 +54,8 @@ export class S5002ParserService {
         nomeBenef: String(ideTrabalhador.nmBenef),
       },
       demonstrativos: this.parseDemonstrativos(ideTrabalhador.dmDev),
-      infoIRComplem: this.parseInfoIRComplem(ideTrabalhador.infoIRComplem),
+      infoIRComplem: allPerAnt.length > 0 ? { perAnt: allPerAnt } : undefined,
+      infoIRComplemList: blocks,
       totInfoIR: this.parseTotInfoIR(evt.totInfoIR),
     };
 
@@ -74,6 +84,52 @@ export class S5002ParserService {
         vlrCR13Men: this.parseDecimal(tot.vlrCR13Men),
       })),
     }));
+  }
+
+  private parseInfoIRComplemBlock(block: any): any {
+    if (!block) return {};
+
+    let parsedPerAnt: { perRefAjuste: string; nrRec1210Orig?: string } | undefined = undefined;
+    if (block.perAnt) {
+      parsedPerAnt = {
+        perRefAjuste: String(block.perAnt.perRefAjuste || ""),
+        nrRec1210Orig: block.perAnt.nrRec1210Orig ? String(block.perAnt.nrRec1210Orig) : undefined,
+      };
+    }
+
+    return {
+      perAnt: parsedPerAnt,
+      ideDep: this.ensureArray(block.ideDep).map((dep: any) => ({
+        cpfDep: normalizeCpf(dep.cpfDep),
+        dtNascto: dep.dtNascto,
+        nomeDep: String(dep.nmDep || dep.nomeDep || dep.nome || ""),
+        depIRRF: String(dep.depIRRF || ""),
+        tpDep: dep.tpDep ? String(dep.tpDep) : undefined,
+      })),
+      infoIrCr: this.ensureArray(block.infoIrCr || block.infoIRCR).map((cr: any) => ({
+        tpCR: String(cr.tpCR || ""),
+        dedDepen: this.ensureArray(cr.dedDepen).map((dd: any) => ({
+          tpRend: String(dd.tpRend || ""),
+          cpfDep: normalizeCpf(dd.cpfDep),
+          vlrDedDep: this.parseDecimal(dd.vlrDedDep),
+        })),
+        penAlim: this.ensureArray(cr.penAlim).map((pa: any) => ({
+          tpRend: String(pa.tpRend || ""),
+          cpfDep: normalizeCpf(pa.cpfDep),
+          vlrDedPenAlim: this.parseDecimal(pa.vlrDedPenAlim),
+        })),
+        vlrIR: this.parseDecimal(cr.vlrIR),
+      })),
+      planSaude: this.ensureArray(block.planSaude).map((plan: any) => ({
+        cnpjOper: normalizeCnpj(plan.cnpjOper),
+        regANS: plan.regANS ? String(plan.regANS) : undefined,
+        vlrSaudeTit: this.parseDecimal(plan.vlrSaudeTit),
+        infoDepSau: this.ensureArray(plan.infoDepSau).map((ids: any) => ({
+          cpfDep: normalizeCpf(ids.cpfDep),
+          vlrSaudeDep: this.parseDecimal(ids.vlrSaudeDep),
+        })),
+      })),
+    };
   }
 
   private parseInfoIRComplem(infoIRComplem: any): any {

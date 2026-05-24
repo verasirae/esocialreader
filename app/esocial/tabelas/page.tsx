@@ -140,14 +140,14 @@ export default function TablesImportPage() {
               <p className="text-sm font-black text-on-surface">Clique para selecionar o CSV</p>
               <p className="text-[11px] text-secondary mt-1">Formato: Colunas separadas por pipe (|)</p>
             </div>
-            <input 
-              id="table-upload" 
-              type="file" 
-              accept=".csv,.txt" 
-              className="hidden" 
-              onChange={handleFileChange} 
-            />
           </div>
+          <input 
+            id="table-upload" 
+            type="file" 
+            accept=".csv,.txt" 
+            className="hidden" 
+            onChange={handleFileChange} 
+          />
 
           {isUploading && (
             <div className="flex flex-col gap-2">

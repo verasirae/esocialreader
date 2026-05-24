@@ -136,10 +136,10 @@ export default function Dashboard() {
       } catch (err: any) {
         errorCount++;
         errors.push(`${file.name}: ${err.message}`);
+      } finally {
+        setUploadProcessed(i + 1);
+        setUploadProgress(Math.round(((i + 1) / files.length) * 100));
       }
-
-      setUploadProcessed(i + 1);
-      setUploadProgress(Math.round(((i + 1) / files.length) * 100));
     }
 
     if (errorCount > 0) {
@@ -196,8 +196,8 @@ export default function Dashboard() {
             {isUploading ? <Loader2 className="animate-spin" size={16} /> : <CloudUpload size={18} />}
             {isUploading ? "Processando..." : "Importar XMLs"}
           </div>
-          <input id="xml-upload-main" type="file" multiple accept=".xml" className="hidden" onChange={handleUpload} disabled={isUploading} />
         </div>
+        <input id="xml-upload-main" type="file" multiple accept=".xml" className="hidden" onChange={handleUpload} disabled={isUploading} />
       </section>
 
       {/* Ações Rápidas */}

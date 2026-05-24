@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { fiscalCache } from "@/lib/fiscal/cache";
 import { storageService } from "@/services/storage/supabase-storage.service";
 import { queueService } from "@/services/esocial/queue.service";
 import { s5002Parser } from "@/services/parser/s5002-parser.service";
@@ -99,8 +100,11 @@ export async function POST(req: NextRequest) {
           }
         });
 
-        // 3. Adicionar na Fila para Processamento Lógico (Assíncrono via after)
-        after(async () => {
+        // Invalidate cache for immediate responsive updates
+        fiscalCache.invalidate(resolvedEmpresaId);
+
+        // 3. Adicionar na Fila para Processamento Lógico (Assíncrono via setTimeout)
+        setTimeout(async () => {
           try {
             await queueService.addJob("s5002-process", {
               xmlContent,
@@ -111,9 +115,9 @@ export async function POST(req: NextRequest) {
               xmlHash: hash
             });
           } catch (jobErr) {
-            console.error(`[Import-After] Erro ao processar job para ${file.name}:`, jobErr);
+            console.error(`[Import-Deferred] Erro ao processar job para ${file.name}:`, jobErr);
           }
-        });
+        }, 0);
 
         queuedCount++;
       } catch (err: any) {

@@ -12,6 +12,7 @@ import {
   ChevronDown
 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
+import { safeJsonFetch } from "@/lib/utils";
 
 export default function EmpregadoresPage() {
   const [empresasData, setEmpresasData] = useState<any[]>([]);
@@ -38,10 +39,8 @@ export default function EmpregadoresPage() {
   const fetchEmpresasData = async (page: number, search: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/esocial/empresas?page=${page}&search=${search}`);
-      if (!res.ok) throw new Error("Erro ao carregar empresas");
-      const result = await res.json();
-      if (result.data) {
+      const result = await safeJsonFetch(`/api/esocial/empresas?page=${page}&search=${search}`);
+      if (result && result.data) {
         setEmpresasData(result.data);
         setTotalItems(result.total);
       }

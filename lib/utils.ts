@@ -48,7 +48,25 @@ export async function fetchWithRetry(
  */
 export async function safeJsonFetch<T = any>(url: string, options?: RequestInit): Promise<T | null> {
   try {
-    const response = await fetchWithRetry(url, options);
+    const isGet = !options?.method || options.method.toUpperCase() === "GET";
+    let finalUrl = url;
+    if (isGet) {
+      const separator = url.includes("?") ? "&" : "?";
+      finalUrl = `${url}${separator}_t=${Date.now()}`;
+    }
+
+    const mergedOptions: RequestInit = {
+      ...options,
+      cache: options?.cache || "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        ...(options?.headers || {})
+      }
+    };
+
+    const response = await fetchWithRetry(finalUrl, mergedOptions);
     const contentType = response.headers.get("content-type");
     
     if (!response.ok) {

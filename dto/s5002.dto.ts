@@ -14,6 +14,7 @@ export interface S5002ParserResult {
   };
   demonstrativos: S5002DmDevDTO[];
   infoIRComplem?: S5002InfoIRComplemDTO;
+  infoIRComplemList?: S5002InfoIRComplemBlockDTO[];
   totInfoIR?: S5002TotInfoIRDTO[];
 }
 
@@ -83,3 +84,41 @@ export interface S5002TotInfoIRDTO {
     vlrCRMen: number;
   }[];
 }
+
+export interface S5002InfoIRComplemBlockDTO {
+  perAnt?: {
+    perRefAjuste: string;
+    nrRec1210Orig?: string;
+  };
+  ideDep?: {
+    cpfDep: string;
+    dtNascto?: string;
+    nomeDep?: string;
+    depIRRF?: string;
+    tpDep?: string;
+  }[];
+  infoIrCr?: {
+    tpCR: string;
+    dedDepen?: {
+      tpRend: string;
+      cpfDep: string;
+      vlrDedDep: number;
+    }[];
+    penAlim?: {
+      tpRend: string;
+      cpfDep: string;
+      vlrDedPenAlim: number;
+    }[];
+    vlrIR?: number;
+  }[];
+  planSaude?: {
+    cnpjOper: string;
+    regANS?: string;
+    vlrSaudeTit: number;
+    infoDepSau?: {
+      cpfDep: string;
+      vlrSaudeDep: number;
+    }[];
+  }[];
+}
+

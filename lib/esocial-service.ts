@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { FiscalClassificationRegistry, FiscalNature } from "./fiscal/classification";
 
 export class EsocialService {
   /**
@@ -30,11 +31,18 @@ export class EsocialService {
 
     if (!incidencia) return null;
 
-    // Lógica de enriquecimento específica conforme regras de negócio citadas
-    // Exemplo: 11 -> Rendimento tributável
+    // Direct match against our centralized FiscalClassificationRegistry
+    const match = FiscalClassificationRegistry.find(r => r.tpInfoIR === codigo);
     let tipoFiscal = "Outros";
-    if (codigo === "11") tipoFiscal = "Rendimento Tributável";
-    if (codigo === "74") tipoFiscal = "Isento (Rescisão)";
+    if (match) {
+      if (match.nature === FiscalNature.REND_TRIBUTAVEL) {
+        tipoFiscal = "Rendimento Tributável";
+      } else if (match.nature === FiscalNature.ISENTO) {
+        tipoFiscal = "Isento";
+      } else {
+        tipoFiscal = match.label;
+      }
+    }
 
     return {
       descricao: incidencia.descricao,

@@ -66,40 +66,44 @@ export class S5002Repository {
         });
 
         // 3. Process Information IR Complementary (perAnt, plans, dependents, etc.)
-        if (parsedData.infoIRComplem) {
-          const comp = parsedData.infoIRComplem;
-          
+        const blocks = parsedData.infoIRComplemList && parsedData.infoIRComplemList.length > 0
+          ? parsedData.infoIRComplemList
+          : (parsedData.infoIRComplem ? [parsedData.infoIRComplem] : []);
+
+        if (blocks.length > 0) {
           // 3a. Sincronizar DependenteMaster
           if (esocialEvento.trabalhadorId) {
             const allDepsMap = new Map<string, { cpf: string, nome?: string, dtNascto?: string, tpDep?: string, depIRRF?: string }>();
             
-            if (comp.ideDep) {
-              comp.ideDep.forEach(d => {
-                const cpf = normalizeCpf(d.cpfDep);
-                allDepsMap.set(cpf, { cpf, nome: d.nomeDep, dtNascto: d.dtNascto, tpDep: d.tpDep, depIRRF: d.depIRRF });
-              });
-            }
+            for (const block of blocks) {
+              if (block.ideDep) {
+                block.ideDep.forEach(d => {
+                  const cpf = normalizeCpf(d.cpfDep);
+                  allDepsMap.set(cpf, { cpf, nome: d.nomeDep, dtNascto: d.dtNascto, tpDep: d.tpDep, depIRRF: d.depIRRF });
+                });
+              }
 
-            if (comp.infoIrCr) {
-              comp.infoIrCr.forEach(cr => {
-                cr.dedDepen?.forEach(dd => {
-                  const cpf = normalizeCpf(dd.cpfDep);
-                  if (!allDepsMap.has(cpf)) allDepsMap.set(cpf, { cpf });
+              if (block.infoIrCr) {
+                block.infoIrCr.forEach(cr => {
+                  cr.dedDepen?.forEach(dd => {
+                    const cpf = normalizeCpf(dd.cpfDep);
+                    if (!allDepsMap.has(cpf)) allDepsMap.set(cpf, { cpf });
+                  });
+                  cr.penAlim?.forEach(pa => {
+                    const cpf = normalizeCpf(pa.cpfDep);
+                    if (!allDepsMap.has(cpf)) allDepsMap.set(cpf, { cpf });
+                  });
                 });
-                cr.penAlim?.forEach(pa => {
-                  const cpf = normalizeCpf(pa.cpfDep);
-                  if (!allDepsMap.has(cpf)) allDepsMap.set(cpf, { cpf });
-                });
-              });
-            }
+              }
 
-            if (comp.planSaude) {
-              comp.planSaude.forEach(ps => {
-                ps.infoDepSau?.forEach(ids => {
-                  const cpf = normalizeCpf(ids.cpfDep);
-                  if (!allDepsMap.has(cpf)) allDepsMap.set(cpf, { cpf });
+              if (block.planSaude) {
+                block.planSaude.forEach(ps => {
+                  ps.infoDepSau?.forEach(ids => {
+                    const cpf = normalizeCpf(ids.cpfDep);
+                    if (!allDepsMap.has(cpf)) allDepsMap.set(cpf, { cpf });
+                  });
                 });
-              });
+              }
             }
 
             for (const [cpf, info] of Array.from(allDepsMap.entries())) {
@@ -130,14 +134,19 @@ export class S5002Repository {
             }
           }
 
-          // 3b. Criar registros de período anterior para cada perAnt
-          const periodosRefs = comp.perAnt && comp.perAnt.length > 0 
-            ? comp.perAnt 
-            : [{ perRefAjuste: esocialEvento.perApur, nrRec1210Orig: undefined }];
+          // 3b. Criar registros de período anterior para cada bloco individualmente
+          for (const block of blocks) {
+            const perAnt = block.perAnt;
+            const isRetro = !!perAnt;
+            const perRefAjuste = isRetro
+              ? (Array.isArray(perAnt) ? perAnt[0]?.perRefAjuste : perAnt.perRefAjuste)
+              : esocialEvento.perApur;
+            const nrRec1210Orig = isRetro
+              ? (Array.isArray(perAnt) ? perAnt[0]?.nrRec1210Orig : perAnt.nrRec1210Orig)
+              : null;
 
-          for (const pRef of periodosRefs) {
             // Coleta dependentes
-            const dependentesParaPeriodo = (comp.ideDep || []).map(async dep => {
+            const dependentesParaPeriodo = (block.ideDep || []).map(async dep => {
               const cpfDepNorm = normalizeCpf(dep.cpfDep);
               let depMasterId: string | null = null;
               if (esocialEvento.trabalhadorId) {
@@ -154,8 +163,8 @@ export class S5002Repository {
               };
             });
 
-            // Coleta InfoIrCr
-            const infoCRParaPeriodo = (comp.infoIrCr || []).map(async cr => {
+            // Coleta InfoIrCr (Deduções e Pensões)
+            const infoCRParaPeriodo = (block.infoIrCr || []).map(async cr => {
               const deducoesDep = await Promise.all((cr.dedDepen || []).map(async dd => {
                 const cpfDepNorm = normalizeCpf(dd.cpfDep);
                 let depMasterId: string | null = null;
@@ -198,7 +207,7 @@ export class S5002Repository {
             });
 
             // Coleta Planos Saude
-            const planosSaudeParaPeriodo = (comp.planSaude || []).map(async plan => {
+            const planosSaudeParaPeriodo = (block.planSaude || []).map(async plan => {
               const cnpjOperNorm = normalizeCnpj(plan.cnpjOper);
               if (!cnpjOperNorm) return null;
 
@@ -238,8 +247,8 @@ export class S5002Repository {
             await tx.s5002PeriodoAnterior.create({
               data: {
                 s5002EventoId: s5002.id,
-                perRefAjuste: String(pRef.perRefAjuste),
-                nrRec1210Orig: pRef.nrRec1210Orig ? String(pRef.nrRec1210Orig) : null,
+                perRefAjuste: String(perRefAjuste),
+                nrRec1210Orig: nrRec1210Orig ? String(nrRec1210Orig) : null,
                 dependentes: { create: resolvedDeps },
                 infoCR: { create: resolvedCRs },
                 planosSaude: { create: resolvedPlans }

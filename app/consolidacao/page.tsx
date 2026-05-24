@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense, useMemo, useCallback } from "react";
+import React, { useState, useEffect, Suspense, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   ShieldCheck, 
@@ -50,29 +50,95 @@ function ConsolidacaoFiscalContent() {
   const [isLoadingTrabalhadores, setIsLoadingTrabalhadores] = useState(false);
   const [rendimentosData, setRendimentosData] = useState<any>(null);
   const [isLoadingRendimentos, setIsLoadingRendimentos] = useState(false);
+  const [planoSaudeData, setPlanoSaudeData] = useState<any>(null);
+  const [isLoadingPlanoSaude, setIsLoadingPlanoSaude] = useState(false);
+
+  const abortRendimentosRef = useRef<AbortController | null>(null);
+  const abortTrabalhadoresRef = useRef<AbortController | null>(null);
+  const abortPlanoSaudeRef = useRef<AbortController | null>(null);
+
+  const fetchPlanoSaude = useCallback(async () => {
+    if (abortPlanoSaudeRef.current) {
+      abortPlanoSaudeRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortPlanoSaudeRef.current = controller;
+
+    setIsLoadingPlanoSaude(true);
+    let url = `/api/fiscal/consolidado/plano-saude?ano=${selectedYear}`;
+    if (selectedMonth) url += `&mes=${selectedMonth}`;
+    if (empresa?.id) url += `&empresaId=${empresa.id}`;
+
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error("Network response was not ok");
+      const data = await res.json();
+      setPlanoSaudeData(data);
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        setPlanoSaudeData(null);
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsLoadingPlanoSaude(false);
+      }
+    }
+  }, [selectedYear, selectedMonth, empresa?.id]);
 
   const fetchTrabalhadores = useCallback(async () => {
+    if (abortTrabalhadoresRef.current) {
+      abortTrabalhadoresRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortTrabalhadoresRef.current = controller;
+
     setIsLoadingTrabalhadores(true);
     let url = `/api/fiscal/consolidado/trabalhadores?ano=${selectedYear}`;
     if (selectedMonth) url += `&mes=${selectedMonth}`;
     if (empresa?.id) url += `&empresaId=${empresa.id}`;
 
-    const data = await safeJsonFetch(url);
-    if (data) setTrabalhadoresList(data);
-    else setTrabalhadoresList([]);
-    setIsLoadingTrabalhadores(false);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error("Network response was not ok");
+      const data = await res.json();
+      setTrabalhadoresList(data);
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        setTrabalhadoresList([]);
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsLoadingTrabalhadores(false);
+      }
+    }
   }, [selectedYear, selectedMonth, empresa?.id]);
 
   const fetchRendimentos = useCallback(async () => {
+    if (abortRendimentosRef.current) {
+      abortRendimentosRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRendimentosRef.current = controller;
+
     setIsLoadingRendimentos(true);
     let url = `/api/fiscal/consolidado/rendimentos?ano=${selectedYear}`;
     if (selectedMonth) url += `&mes=${selectedMonth}`;
     if (empresa?.id) url += `&empresaId=${empresa.id}`;
 
-    const data = await safeJsonFetch(url);
-    if (data) setRendimentosData(data);
-    else setRendimentosData(null);
-    setIsLoadingRendimentos(false);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error("Network response was not ok");
+      const data = await res.json();
+      setRendimentosData(data);
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        setRendimentosData(null);
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsLoadingRendimentos(false);
+      }
+    }
   }, [selectedYear, selectedMonth, empresa?.id]);
 
   useEffect(() => {
@@ -82,7 +148,10 @@ function ConsolidacaoFiscalContent() {
     if (activeTab === "Rendimentos e retenções" && selectedYear) {
       fetchRendimentos();
     }
-  }, [activeTab, selectedYear, fetchTrabalhadores, fetchRendimentos]);
+    if (activeTab === "Plano de saúde" && selectedYear) {
+      fetchPlanoSaude();
+    }
+  }, [activeTab, selectedYear, fetchTrabalhadores, fetchRendimentos, fetchPlanoSaude]);
 
   useEffect(() => {
     fetchInitialData();
@@ -183,6 +252,8 @@ function ConsolidacaoFiscalContent() {
               isLoadingTrabalhadores={isLoadingTrabalhadores}
               rendimentosData={rendimentosData}
               isLoadingRendimentos={isLoadingRendimentos}
+              planoSaudeData={planoSaudeData}
+              isLoadingPlanoSaude={isLoadingPlanoSaude}
               onBack={handleBackToYears}
             />
           )}
@@ -278,6 +349,8 @@ function DetailedConsolidationView({
   isLoadingTrabalhadores,
   rendimentosData,
   isLoadingRendimentos,
+  planoSaudeData,
+  isLoadingPlanoSaude,
   onBack 
 }: any) {
   const months = [
@@ -593,7 +666,7 @@ function DetailedConsolidationView({
                   <SociedadesDetailedView onBack={() => setIsSociedadesDetailed(false)} />
                 )
               ) : activeTab === "Plano de saúde" ? (
-                <PlanoSaudeTab data={yearData} />
+                <PlanoSaudeTab data={planoSaudeData} isLoading={isLoadingPlanoSaude} />
               ) : (
                 <div className="py-20 text-center flex flex-col items-center gap-4">
                   <Info className="text-secondary opacity-20 w-12 h-12" />
@@ -646,6 +719,20 @@ function DetailedConsolidationView({
   );
 }
 
+const fiscalNatureLabels: Record<string, string> = {
+  REND_TRIBUTAVEL: "Rendimento Tributável",
+  PREVIDENCIA_OFICIAL: "Previdência Oficial",
+  PREVIDENCIA_COMPLEMENTAR: "Previdência Complementar",
+  DEPENDENTE: "Dedução Dependente",
+  PENSAO: "Pensão Alimentícia",
+  PLANO_SAUDE: "Plano de Saúde",
+  SIMPLIFICADO: "Desconto Simplificado",
+  IRRF_RETIDO: "IRRF Retido",
+  ISENTO: "Rendimento Isento",
+  EXCLUSIVO: "Tributação Exclusiva",
+  OUTROS: "Outros"
+};
+
 import { FiscalNature } from "@/lib/fiscal/engine";
 
 function RendimentosTab({ data, selectedMonth, onBack }: any) {
@@ -666,7 +753,7 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
 
     const findValByNature = (nature: string) => {
       return data.auditEntries
-        .filter((entry: any) => entry.fiscalNature === nature)
+        .filter((entry: any) => entry.fiscalNature === nature && entry.incluido !== false && entry.valorCompoeBase !== false)
         .reduce((acc: number, curr: any) => acc + curr.valor, 0);
     };
 
@@ -684,6 +771,8 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
     const prevPrivada = data.auditEntries
       .filter((entry: any) => 
         entry.fiscalNature === "PREVIDENCIA_COMPLEMENTAR" && 
+        entry.incluido !== false &&
+        entry.valorCompoeBase !== false &&
         (["46", "47"].includes(entry.tpInfoIR) || entry.descricaoOficial?.toLowerCase().includes("privada") || entry.categoriaFiscal?.toLowerCase().includes("privada"))
       )
       .reduce((acc: number, curr: any) => acc + curr.valor, 0);
@@ -691,6 +780,8 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
     const fapi = data.auditEntries
       .filter((entry: any) => 
         entry.fiscalNature === "PREVIDENCIA_COMPLEMENTAR" && 
+        entry.incluido !== false &&
+        entry.valorCompoeBase !== false &&
         (["61", "62"].includes(entry.tpInfoIR) || entry.descricaoOficial?.toLowerCase().includes("fapi") || entry.categoriaFiscal?.toLowerCase().includes("fapi"))
       )
       .reduce((acc: number, curr: any) => acc + curr.valor, 0);
@@ -698,6 +789,8 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
     const funpresp = data.auditEntries
       .filter((entry: any) => 
         entry.fiscalNature === "PREVIDENCIA_COMPLEMENTAR" && 
+        entry.incluido !== false &&
+        entry.valorCompoeBase !== false &&
         (entry.tpInfoIR === "48" || entry.descricaoOficial?.toLowerCase().includes("funpresp") || entry.categoriaFiscal?.toLowerCase().includes("funpresp"))
       )
       .reduce((acc: number, curr: any) => acc + curr.valor, 0);
@@ -705,6 +798,8 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
     const entePublico = data.auditEntries
       .filter((entry: any) => 
         entry.fiscalNature === "PREVIDENCIA_COMPLEMENTAR" && 
+        entry.incluido !== false &&
+        entry.valorCompoeBase !== false &&
         (["63", "64"].includes(entry.tpInfoIR) || entry.descricaoOficial?.toLowerCase().includes("patrocinador") || entry.descricaoOficial?.toLowerCase().includes("fundação") || entry.categoriaFiscal?.toLowerCase().includes("ente público") || entry.categoriaFiscal?.toLowerCase().includes("patrocinador"))
       )
       .reduce((acc: number, curr: any) => acc + curr.valor, 0);
@@ -717,7 +812,6 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
     const mapIsentoCodeToGroup = (code: string): string => {
       const c = code.trim();
       if (["70", "71", "ISENTO_65_ANOS"].includes(c)) return "ISENTO_65_ANOS";
-      if (["61", "72", "DIARIAS"].includes(c)) return "DIARIAS";
       if (["62", "73", "AJUDA_CUSTO"].includes(c)) return "AJUDA_CUSTO";
       if (["63", "74", "INDENIZACAO_PDV"].includes(c)) return "INDENIZACAO_PDV";
       if (["64", "75", "ABONO_PECUNIARIO"].includes(c)) return "ABONO_PECUNIARIO";
@@ -750,7 +844,7 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
     };
 
     data.auditEntries
-      .filter((entry: any) => entry.fiscalNature === "ISENTO")
+      .filter((entry: any) => entry.fiscalNature === "ISENTO" && entry.incluido !== false && entry.valorCompoeBase !== false)
       .forEach((entry: any) => {
         const group = mapIsentoCodeToGroup(entry.codigoOficial);
         isentos[group] = (isentos[group] || 0) + entry.valor;
@@ -794,7 +888,7 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
     });
 
     return Object.entries(groups).map(([name, entries]) => {
-      const activeEntries = entries.filter((e: any) => e.incluido !== false);
+      const activeEntries = entries.filter((e: any) => e.incluido !== false && e.valorCompoeBase !== false);
       const totalConsolidado = activeEntries.reduce((sum, e) => sum + e.valor, 0);
       
       const inactiveEntries = entries.filter((e: any) => e.incluido === false);
@@ -1031,10 +1125,14 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
                                   !entry.incluido ? "bg-red-50/20 text-secondary" : ""
                                 )}>
                                   <td className="p-2 font-mono text-secondary font-medium">{entry.tpCR}</td>
-                                  <td className="p-2 font-mono text-secondary">{entry.tpInfoIR || "-"}</td>
+                                  <td className="p-2 font-mono text-secondary">
+                                    <span title={entry.descricaoOficial || entry.descricao || ""} className="cursor-help border-b border-dotted border-secondary/40">
+                                      {entry.tpInfoIR || "-"}
+                                    </span>
+                                  </td>
                                   <td className="p-2 font-semibold">
-                                    <span className="bg-primary/5 border border-primary/10 text-primary px-1.5 py-0.5 rounded-sm text-[8px]">
-                                      {entry.fiscalNature || "OUTROS"}
+                                    <span className="bg-primary/5 border border-primary/10 text-primary px-1.5 py-0.5 rounded-sm text-[8px]" title={entry.descricaoOficial || entry.descricao || ""}>
+                                      {fiscalNatureLabels[entry.fiscalNature] || entry.fiscalNature || "Outros"}
                                     </span>
                                   </td>
                                   <td className="p-2 text-right font-mono font-bold">
@@ -1180,6 +1278,9 @@ function RendimentosSummaryTab({ data, isLoading, onShowDetail }: any) {
     const grouped = new Map<string, any>();
 
     data.auditEntries.forEach((entry: any) => {
+      if (entry.incluido === false || entry.ativoFiscal === false || entry.valorCompoeBase === false) {
+        return;
+      }
       let rawCr = entry.tpCR || "0561";
       if (rawCr.includes("-")) {
         rawCr = rawCr.replace("-", "");
@@ -1953,7 +2054,7 @@ function SociedadesDetailedView({ onBack }: any) {
   );
 }
 
-function PlanoSaudeTab({ data }: any) {
+function PlanoSaudeTab({ data, isLoading }: any) {
   const Row = ({ label, value }: any) => (
     <div className="flex justify-between items-center py-2 border-b border-outline-variant/30 text-[11px] hover:bg-surface-container/20 transition-all pl-6">
       <span className="text-secondary font-medium">{label}</span>
@@ -1965,6 +2066,23 @@ function PlanoSaudeTab({ data }: any) {
     </div>
   );
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4 bg-white border border-outline-variant rounded-sm">
+        <Loader2 className="animate-spin text-primary w-8 h-8" />
+        <p className="text-secondary text-xs italic">Carregando dados reais do plano de saúde...</p>
+      </div>
+    );
+  }
+
+  const quantidadeTitulares = data?.quantidadeTitulares ?? 0;
+  const quantidadeDependentes = data?.quantidadeDependentes ?? 0;
+  const valoresTitulares = data?.valoresTitulares ?? 0;
+  const valoresReembolsoTitulares = data?.valoresReembolsoTitulares ?? 0;
+  const valoresDependentes = data?.valoresDependentes ?? 0;
+  const valoresReembolsoDependentes = data?.valoresReembolsoDependentes ?? 0;
+  const operadorasCount = data?.operadorasCount ?? 0;
+
   return (
     <div className="flex flex-col gap-2">
       <div className="bg-surface-container-low px-6 py-3 rounded-t-sm border border-outline-variant flex items-center justify-between">
@@ -1972,16 +2090,16 @@ function PlanoSaudeTab({ data }: any) {
       </div>
       
       <div className="border-x border-b border-outline-variant bg-white pb-6">
-        <Row label="Quantidade de titulares" value={166} />
-        <Row label="Quantidade de dependentes" value={227} />
-        <Row label="Valores pagos por titulares" value={139150.84} />
-        <Row label="Valores de reembolso dos titulares" value={0} />
-        <Row label="Valores pagos por dependentes" value={128572.38} />
-        <Row label="Valores de reembolso dos dependentes" value={0} />
+        <Row label="Quantidade de titulares" value={quantidadeTitulares} />
+        <Row label="Quantidade de dependentes" value={quantidadeDependentes} />
+        <Row label="Valores pagos por titulares" value={valoresTitulares} />
+        <Row label="Valores de reembolso dos titulares" value={valoresReembolsoTitulares} />
+        <Row label="Valores pagos por dependentes" value={valoresDependentes} />
+        <Row label="Valores de reembolso dos dependentes" value={valoresReembolsoDependentes} />
         
         <div className="mt-8 px-6 text-[11px] flex justify-between items-center group hover:bg-surface-container/20 transition-all py-2 border-b border-outline-variant/30">
           <span className="text-secondary font-medium">Relação das operadoras de saúde:</span>
-          <span className="font-mono font-bold text-on-surface pr-6">3</span>
+          <span className="font-mono font-bold text-on-surface pr-6">{operadorasCount}</span>
         </div>
       </div>
     </div>

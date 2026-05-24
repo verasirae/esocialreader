@@ -12,7 +12,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, safeJsonFetch } from "@/lib/utils";
 import { format } from "date-fns";
 
 const TABLES = [
@@ -36,11 +36,13 @@ export default function TablesViewPage() {
   const fetchData = useCallback(async (tableId: string, page: number) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/esocial/tables?tableId=${tableId}&page=${page}&pageSize=50`);
-      if (!res.ok) throw new Error("Erro ao carregar dados");
-      const json = await res.json();
-      setData(json.data);
-      setPagination(json.pagination);
+      const json = await safeJsonFetch(`/api/esocial/tables?tableId=${tableId}&page=${page}&pageSize=50`);
+      if (json) {
+        setData(json.data || []);
+        if (json.pagination) {
+          setPagination(json.pagination);
+        }
+      }
     } catch (err) {
       console.error(err);
     } finally {

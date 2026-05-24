@@ -12,7 +12,7 @@ import {
   UserCheck,
   Building
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, safeJsonFetch } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
 
 export default function PendenciasPage() {
@@ -36,9 +36,8 @@ export default function PendenciasPage() {
 
   const fetchPendencies = async () => {
     try {
-      const res = await fetch("/api/fiscal/pendencies");
-      if (res.ok) {
-        const data = await res.json();
+      const data = await safeJsonFetch("/api/fiscal/pendencies");
+      if (data) {
         setPendencies(data);
       }
     } catch (err) {
