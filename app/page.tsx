@@ -46,6 +46,56 @@ export default function Dashboard() {
   });
   const [history, setHistory] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncCounts, setSyncCounts] = useState({
+    pendingCount: 0,
+    processingCount: 0,
+    processedCount: 0,
+    errorCount: 0
+  });
+
+  const checkSyncStatus = async () => {
+    try {
+      const data = await safeJsonFetch("/api/esocial/s5002/import/status");
+      if (data && data.success) {
+        setIsSyncing(data.isSyncing);
+        setSyncCounts({
+          pendingCount: data.pendingCount,
+          processingCount: data.processingCount,
+          processedCount: data.processedCount,
+          errorCount: data.errorCount
+        });
+        return data.isSyncing;
+      }
+    } catch (err) {
+      console.error("[checkSyncStatus] Failed to check sync status:", err);
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    checkSyncStatus();
+  }, []);
+
+  useEffect(() => {
+    let intervalId: any = null;
+
+    if (isSyncing) {
+      intervalId = setInterval(async () => {
+        const stillSyncing = await checkSyncStatus();
+        if (!stillSyncing) {
+          fetchFiscalCalendar();
+          fetchSummaryStats();
+          fetchHistory();
+          clearInterval(intervalId);
+        }
+      }, 1500);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isSyncing]);
 
   useEffect(() => {
     fetchFiscalCalendar();
@@ -56,6 +106,7 @@ export default function Dashboard() {
       fetchFiscalCalendar();
       fetchSummaryStats();
       fetchHistory();
+      checkSyncStatus();
     };
 
     window.addEventListener("trabalhador-added", handleRefresh);
@@ -149,6 +200,7 @@ export default function Dashboard() {
     }
     
     setIsUploading(false);
+    await checkSyncStatus();
     fetchFiscalCalendar();
     fetchSummaryStats();
     fetchHistory();
@@ -156,6 +208,22 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-lg">
+      {/* Header com Sumário Rápido de Sincronização */}
+      {isSyncing && (
+        <section className="card p-lg bg-surface-container border-b-2 border-secondary mb-4 p-6 animate-pulse">
+           <div className="flex justify-between items-center mb-2">
+              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-secondary">
+                <Loader2 size={12} className="animate-spin text-secondary" />
+                Sincronizando Consolidação Fiscal e Processando Lotes XML ({syncCounts.pendingCount + syncCounts.processingCount} lote(s) pendente(s))
+              </span>
+              <span className="text-[10px] font-black p-1 bg-secondary/15 rounded text-secondary animate-pulse">Processando Fila</span>
+           </div>
+           <p className="text-[11px] text-secondary">
+             O sistema está processando os dados e aplicando regência fiscal. Os relatórios e saldos finais serão atualizados de forma dinâmica assim que o processo for concluído, sem necessidade de recarregar a página manualmente.
+           </p>
+        </section>
+      )}
+
       {/* Header com Sumário Rápido de Upload */}
       {isUploading && (
         <section className="card p-lg bg-surface-container border-b-2 border-primary mb-4 p-6">

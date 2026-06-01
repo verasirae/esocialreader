@@ -84,6 +84,58 @@ function EsocialTablesContent() {
   const [groupFilter, setGroupFilter] = useState("");
   const [isParamsProcessed, setIsParamsProcessed] = useState(false);
 
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncCounts, setSyncCounts] = useState({
+    pendingCount: 0,
+    processingCount: 0,
+    processedCount: 0,
+    errorCount: 0
+  });
+
+  const checkSyncStatus = async () => {
+    try {
+      const data = await safeJsonFetch("/api/esocial/s5002/import/status");
+      if (data && data.success) {
+        setIsSyncing(data.isSyncing);
+        setSyncCounts({
+          pendingCount: data.pendingCount,
+          processingCount: data.processingCount,
+          processedCount: data.processedCount,
+          errorCount: data.errorCount
+        });
+        return data.isSyncing;
+      }
+    } catch (err) {
+      console.error("[checkSyncStatus] Failed to check sync status:", err);
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    checkSyncStatus();
+  }, []);
+
+  useEffect(() => {
+    let intervalId: any = null;
+
+    if (isSyncing) {
+      intervalId = setInterval(async () => {
+        const stillSyncing = await checkSyncStatus();
+        if (!stillSyncing) {
+          fetchStats();
+          fetchPeriodos();
+          fetchTrabalhadoresList();
+          fetchAuditData(currentPage, searchTerm);
+          clearInterval(intervalId);
+        }
+      }, 1500);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isSyncing, currentPage, searchTerm]);
+
   const { openRegisterEmpresaModal, openRegisterTrabalhadorModal, openRegisterOperadoraModal } = useModals();
 
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
@@ -244,12 +296,14 @@ function EsocialTablesContent() {
       }
       
       alert(`Processamento de Upload Concluído!\nSucesso: ${successFiles}\nErros: ${errorFiles}`);
+      await checkSyncStatus();
       fetchAuditData(1, searchTerm);
       fetchStats();
     } catch (err: any) {
       alert("Falha na Auditoração: " + err.message);
     } finally {
       setIsUploading(false);
+      await checkSyncStatus();
       if (e.target) e.target.value = "";
     }
   };
@@ -1887,6 +1941,22 @@ function EsocialTablesContent() {
     <div className="flex flex-col gap-8 -mt-margin-page -mx-margin-page p-margin-page h-full bg-[#FAF9FC]">
       {renderDataModal()}
       {showInformeModal && renderInformeModal()}
+      
+      {isSyncing && (
+        <div className="card bg-white border-l-4 border-primary p-6 animate-pulse shadow-sm rounded-lg flex flex-col gap-2 -mx-2 mt-2">
+           <div className="flex justify-between items-center">
+              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#6c5ecf]">
+                <Loader2 size={12} className="animate-spin text-[#6c5ecf]" />
+                Sincronizando Consolidação e Calculando Alíquotas ({syncCounts.pendingCount + syncCounts.processingCount} lote(s) pendente(s))
+              </span>
+              <span className="text-[9px] font-black p-1 bg-[#6c5ecf]/10 rounded text-[#6c5ecf] animate-pulse">Sincronizando Fila S-5002</span>
+           </div>
+           <p className="text-[11px] text-secondary">
+             O sistema está integrando os proventos consolidados, gerando lastros e recalculando os filtros de consulta das DIRFs de forma segura dos lotes XMLs recém-carregados. Esta página atualizará gradualmente seus relatórios e consultas.
+           </p>
+        </div>
+      )}
+
       {/* Top Header Section */}
       <div className="flex items-center justify-between border-b border-outline-variant bg-white px-8 -mx-8 -mt-8 py-6 h-auto min-h-24 sticky top-0 z-30 shadow-sm transition-all">
         <div className="flex items-center gap-1">

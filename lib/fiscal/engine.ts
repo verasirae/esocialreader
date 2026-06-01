@@ -355,11 +355,36 @@ export class FiscalEngine {
   /**
    * Pipeline de governança para Retificação Complementar perAnt (Tipo B)
    */
-  public static resolveComplementaryPerAntRetification(candidates: AuditEntry[]): void {
+  public static resolveComplementaryPerAntRetification(candidates: AuditEntry[], allS5002Eventos?: any[]): void {
     const adjustedReceipts = new Set<string>();
+    const adjustedPeriodsForWorker = new Set<string>(); // "cpf-perFiscal"
+
     for (const entry of candidates) {
       if (entry.perApurEvento !== entry.perFiscal && entry.metadata?.nrRec1210Orig) {
         adjustedReceipts.add(entry.metadata.nrRec1210Orig);
+        if (entry.cpf && entry.perFiscal) {
+          adjustedPeriodsForWorker.add(`${entry.cpf}-${entry.perFiscal}`);
+        }
+      }
+    }
+
+    // Capture adjusted periods and receipts directly from the database event models to ensure that even empty adjustment periods 
+    // (periods where everything was removed, e.g. no pension/dependent/health anymore) are correctly resolved and deactivate original details.
+    if (allS5002Eventos) {
+      for (const evt of allS5002Eventos) {
+        const perApurEvento = evt.perApur;
+        const workerCpf = evt.trabalhador?.cpf;
+        if (!workerCpf) continue;
+
+        for (const pa of evt.periodosAnteriores || []) {
+          const perFiscal = pa.perRefAjuste;
+          if (perApurEvento !== perFiscal) {
+            if (pa.nrRec1210Orig) {
+              adjustedReceipts.add(pa.nrRec1210Orig);
+            }
+            adjustedPeriodsForWorker.add(`${workerCpf}-${perFiscal}`);
+          }
+        }
       }
     }
 
@@ -373,8 +398,13 @@ export class FiscalEngine {
     for (const entry of candidates) {
       const isOriginalDetail = entry.perApurEvento === entry.perFiscal && infoIRComplemTables.has(entry.origemTabela || "");
       const originalRecibo = entry.metadata?.nrRecibo || entry.metadata?.recibo;
+      const workerPeriodKey = `${entry.cpf}-${entry.perFiscal}`;
 
-      if (isOriginalDetail && originalRecibo && adjustedReceipts.has(originalRecibo)) {
+      const shouldDeactivate = 
+        (originalRecibo && adjustedReceipts.has(originalRecibo)) ||
+        (adjustedPeriodsForWorker.has(workerPeriodKey));
+
+      if (isOriginalDetail && shouldDeactivate) {
         // Marcado como sobreposto/substituído pelo bloco de ajuste de período anterior
         entry.ativoFiscal = true;
         entry.incluido = true;
@@ -1060,7 +1090,7 @@ export class FiscalEngine {
 
     // Executar pipelines de governança e retificação fiscal de ponta a ponta
     this.resolveRetificacaoFiscal(filteredCandidates);
-    this.resolveComplementaryPerAntRetification(filteredCandidates);
+    this.resolveComplementaryPerAntRetification(filteredCandidates, s5002Eventos);
     this.resolveSemanticRetification(filteredCandidates);
     this.resolvePrecedenciaFiscal(filteredCandidates);
     this.resolveDeduplicacaoNatureza(filteredCandidates);

@@ -14,10 +14,90 @@ export class S5002Repository {
 
         if (!esocialEvento) throw new Error("Evento eSocial não encontrado");
 
-        // 1. Create S5002Evento root (Idempotent: remove old details if re-processing same event)
-        await tx.s5002Evento.deleteMany({
-          where: { eventoId: esocialEvento.id }
+        // 1. Safe cascade deletion of existing detail records for this event to satisfy foreign key constraints
+        const oldEvents = await tx.s5002Evento.findMany({
+          where: { eventoId: esocialEvento.id },
+          select: { id: true }
         });
+        const oldEventIds = oldEvents.map(e => e.id);
+
+        if (oldEventIds.length > 0) {
+          // A. Delete S5002DmDev sub-records and their children
+          const oldDmDevs = await tx.s5002DmDev.findMany({
+            where: { s5002EventoId: { in: oldEventIds } },
+            select: { id: true }
+          });
+          const oldDmDevIds = oldDmDevs.map(d => d.id);
+
+          if (oldDmDevIds.length > 0) {
+            await tx.s5002InfoIR.deleteMany({
+              where: { dmDevId: { in: oldDmDevIds } }
+            });
+            await tx.s5002TotApurMen.deleteMany({
+              where: { dmDevId: { in: oldDmDevIds } }
+            });
+            await tx.s5002DmDev.deleteMany({
+              where: { id: { in: oldDmDevIds } }
+            });
+          }
+
+          // B. Delete S5002PeriodoAnterior sub-records and their children
+          const oldPeriodos = await tx.s5002PeriodoAnterior.findMany({
+            where: { s5002EventoId: { in: oldEventIds } },
+            select: { id: true }
+          });
+          const oldPeriodoIds = oldPeriodos.map(p => p.id);
+
+          if (oldPeriodoIds.length > 0) {
+            // Delete dependentes
+            await tx.s5002PeriodoDependente.deleteMany({
+              where: { periodoAnteriorId: { in: oldPeriodoIds } }
+            });
+
+            // Delete planosSaude sub-records then planosSaude
+            const oldPlanos = await tx.s5002PeriodoPlanoSaude.findMany({
+              where: { periodoAnteriorId: { in: oldPeriodoIds } },
+              select: { id: true }
+            });
+            const oldPlanoIds = oldPlanos.map(ps => ps.id);
+            if (oldPlanoIds.length > 0) {
+              await tx.s5002PeriodoPlanoSaudeDep.deleteMany({
+                where: { planoSaudeId: { in: oldPlanoIds } }
+              });
+              await tx.s5002PeriodoPlanoSaude.deleteMany({
+                where: { id: { in: oldPlanoIds } }
+              });
+            }
+
+            // Delete infoCR sub-records then infoCR
+            const oldInfoCRs = await tx.s5002PeriodoInfoCR.findMany({
+              where: { periodoAnteriorId: { in: oldPeriodoIds } },
+              select: { id: true }
+            });
+            const oldInfoCRIds = oldInfoCRs.map(icr => icr.id);
+            if (oldInfoCRIds.length > 0) {
+              await tx.s5002PeriodoDedDep.deleteMany({
+                where: { infoCRId: { in: oldInfoCRIds } }
+              });
+              await tx.s5002PeriodoPensao.deleteMany({
+                where: { infoCRId: { in: oldInfoCRIds } }
+              });
+              await tx.s5002PeriodoInfoCR.deleteMany({
+                where: { id: { in: oldInfoCRIds } }
+              });
+            }
+
+            // Finally delete PeriodoAnterior
+            await tx.s5002PeriodoAnterior.deleteMany({
+              where: { id: { in: oldPeriodoIds } }
+            });
+          }
+
+          // C. Delete S5002Evento matching old event IDs
+          await tx.s5002Evento.deleteMany({
+            where: { id: { in: oldEventIds } }
+          });
+        }
 
         // 2. Prepare Demonstrativos using nested create
         const demonstrativosData = parsedData.demonstrativos.map(dm => ({
@@ -134,6 +214,17 @@ export class S5002Repository {
             }
           }
 
+          // Busca todos os dependentes masters e operadoras de uma vez para mapeamento síncrono em memória, evitando queries paralelas ou timeouts na transação
+          const depMasters = esocialEvento.trabalhadorId
+            ? await tx.dependenteMaster.findMany({
+                where: { trabalhadorId: esocialEvento.trabalhadorId }
+              })
+            : [];
+          const depMasterMap = new Map(depMasters.map(dm => [dm.cpf, dm.id]));
+
+          const operadoras = await tx.operadoraSaude.findMany();
+          const operadorasMap = new Map(operadoras.map(op => [op.cnpj, op.id]));
+
           // 3b. Criar registros de período anterior para cada bloco individualmente
           for (const block of blocks) {
             const perAnt = block.perAnt;
@@ -146,15 +237,9 @@ export class S5002Repository {
               : null;
 
             // Coleta dependentes
-            const dependentesParaPeriodo = (block.ideDep || []).map(async dep => {
+            const resolvedDeps = (block.ideDep || []).map(dep => {
               const cpfDepNorm = normalizeCpf(dep.cpfDep);
-              let depMasterId: string | null = null;
-              if (esocialEvento.trabalhadorId) {
-                const dm = await tx.dependenteMaster.findUnique({
-                  where: { trabalhadorId_cpf: { trabalhadorId: esocialEvento.trabalhadorId, cpf: cpfDepNorm } }
-                });
-                depMasterId = dm?.id || null;
-              }
+              const depMasterId = depMasterMap.get(cpfDepNorm) || null;
               return {
                 dependenteId: depMasterId,
                 cpfDep: cpfDepNorm,
@@ -164,40 +249,28 @@ export class S5002Repository {
             });
 
             // Coleta InfoIrCr (Deduções e Pensões)
-            const infoCRParaPeriodo = (block.infoIrCr || []).map(async cr => {
-              const deducoesDep = await Promise.all((cr.dedDepen || []).map(async dd => {
+            const resolvedCRs = (block.infoIrCr || []).map(cr => {
+              const deducoesDep = (cr.dedDepen || []).map(dd => {
                 const cpfDepNorm = normalizeCpf(dd.cpfDep);
-                let depMasterId: string | null = null;
-                if (esocialEvento.trabalhadorId) {
-                  const dm = await tx.dependenteMaster.findUnique({
-                    where: { trabalhadorId_cpf: { trabalhadorId: esocialEvento.trabalhadorId, cpf: cpfDepNorm } }
-                  });
-                  depMasterId = dm?.id || null;
-                }
+                const depMasterId = depMasterMap.get(cpfDepNorm) || null;
                 return {
                   dependenteId: depMasterId,
                   cpfDep: cpfDepNorm,
                   tpRend: dd.tpRend,
                   vlrDedDep: dd.vlrDedDep
                 };
-              }));
+              });
 
-              const pensoes = await Promise.all((cr.penAlim || []).map(async pa => {
+              const pensoes = (cr.penAlim || []).map(pa => {
                 const cpfDepNorm = normalizeCpf(pa.cpfDep);
-                let depMasterId: string | null = null;
-                if (esocialEvento.trabalhadorId) {
-                  const dm = await tx.dependenteMaster.findUnique({
-                    where: { trabalhadorId_cpf: { trabalhadorId: esocialEvento.trabalhadorId, cpf: cpfDepNorm } }
-                  });
-                  depMasterId = dm?.id || null;
-                }
+                const depMasterId = depMasterMap.get(cpfDepNorm) || null;
                 return {
                   dependenteId: depMasterId,
                   cpfDep: cpfDepNorm,
                   tpRend: pa.tpRend,
                   vlrDedPenAlim: pa.vlrDedPenAlim
                 };
-              }));
+              });
 
               return {
                 tpCR: String(cr.tpCR),
@@ -207,42 +280,30 @@ export class S5002Repository {
             });
 
             // Coleta Planos Saude
-            const planosSaudeParaPeriodo = (block.planSaude || []).map(async plan => {
+            const resolvedPlans = (block.planSaude || []).map(plan => {
               const cnpjOperNorm = normalizeCnpj(plan.cnpjOper);
               if (!cnpjOperNorm) return null;
 
-              const operadora = await tx.operadoraSaude.findUnique({
-                where: { cnpj: cnpjOperNorm }
-              });
+              const operadoraId = operadorasMap.get(cnpjOperNorm) || null;
 
-              const dependentesPlano = await Promise.all((plan.infoDepSau || []).map(async ids => {
+              const dependentesPlano = (plan.infoDepSau || []).map(ids => {
                 const cpfDepNorm = normalizeCpf(ids.cpfDep);
-                let depMasterId: string | null = null;
-                if (esocialEvento.trabalhadorId) {
-                  const dm = await tx.dependenteMaster.findUnique({
-                    where: { trabalhadorId_cpf: { trabalhadorId: esocialEvento.trabalhadorId, cpf: cpfDepNorm } }
-                  });
-                  depMasterId = dm?.id || null;
-                }
+                const depMasterId = depMasterMap.get(cpfDepNorm) || null;
                 return {
                   dependenteId: depMasterId,
                   cpfDep: cpfDepNorm,
                   vlrSaudeDep: ids.vlrSaudeDep
                 };
-              }));
+              });
 
               return {
-                operadoraId: operadora?.id || null,
+                operadoraId,
                 cnpjOper: cnpjOperNorm,
                 regANS: plan.regANS,
                 vlrSaudeTit: plan.vlrSaudeTit,
                 dependentes: { create: dependentesPlano }
               };
-            });
-
-            const resolvedDeps = await Promise.all(dependentesParaPeriodo);
-            const resolvedCRs = await Promise.all(infoCRParaPeriodo);
-            const resolvedPlans = (await Promise.all(planosSaudeParaPeriodo)).filter(p => p !== null) as any[];
+            }).filter(p => p !== null) as any[];
 
             await tx.s5002PeriodoAnterior.create({
               data: {

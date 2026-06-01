@@ -40,13 +40,18 @@ export class EsocialEventoRepository {
         });
 
         if (existing) {
-          // Se já existe, apenas atualiza vínculos se necessário
-          if ((!existing.empresaId && resolvedEmpresaId) || (!existing.trabalhadorId && resolvedTrabalhadorId)) {
+          // Se já existe, atualiza vínculos ou dados correspondentes se necessário/mudados (auto-cura de nrRecibo/nrReciboOrig histórico)
+          const needsRelationUpdate = (!existing.empresaId && resolvedEmpresaId) || (!existing.trabalhadorId && resolvedTrabalhadorId);
+          const needsReceiptUpdate = (existing.nrRecibo !== parsedData.nrRecibo) || (parsedData.nrReciboOrig && existing.nrReciboOrig !== parsedData.nrReciboOrig);
+
+          if (needsRelationUpdate || needsReceiptUpdate) {
             return await tx.esocialEvento.update({
               where: { id: existing.id },
               data: {
                 empresaId: existing.empresaId || resolvedEmpresaId,
                 trabalhadorId: existing.trabalhadorId || resolvedTrabalhadorId,
+                nrRecibo: parsedData.nrRecibo || existing.nrRecibo,
+                nrReciboOrig: parsedData.nrReciboOrig || existing.nrReciboOrig,
                 status: (existing.empresaId || resolvedEmpresaId) && (existing.trabalhadorId || resolvedTrabalhadorId) 
                   ? StatusProcessamento.processado 
                   : StatusProcessamento.pendente

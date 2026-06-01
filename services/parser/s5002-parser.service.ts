@@ -47,7 +47,7 @@ export class S5002ParserService {
       tpEvento: "S-5002",
       cnpjRaiz,
       indRetif: Number(ideEvento.indRetif) || 1,
-      nrRecibo: String(ideEvento.nrRecibo || ""),
+      nrRecibo: String(ideEvento.nrRecArqBase || ideEvento.nrRecibo || ""),
       nrReciboOrig: ideEvento.nrReciboOrig ? String(ideEvento.nrReciboOrig) : undefined,
       trabalhador: {
         cpfBenef: normalizeCpf(ideTrabalhador.cpfBenef),
