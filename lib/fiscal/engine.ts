@@ -352,6 +352,18 @@ export class FiscalEngine {
     }
   }
 
+  private static getBusinessKey(entry: AuditEntry): string {
+    const cpf = entry.cpf || "";
+    const perFiscal = entry.perFiscal || "";
+    const nature = entry.fiscalNature || "";
+    const cpfDep = entry.metadata?.cpfDep || "";
+    const tpRend = entry.metadata?.tpRendOriginal || entry.codigoOficial || entry.tpInfoIR || "";
+    const cnpjOper = entry.metadata?.cnpjOper || "";
+    const regANS = entry.metadata?.regANS || "";
+    const origemTabela = entry.origemTabela || "";
+    return `${cpf}_${perFiscal}_${nature}_${cpfDep}_${tpRend}_${cnpjOper}_${regANS}_${origemTabela}`;
+  }
+
   /**
    * Pipeline de governança para Retificação Complementar perAnt (Tipo B)
    */
@@ -359,9 +371,18 @@ export class FiscalEngine {
     const adjustedReceipts = new Set<string>();
     const adjustedPeriodsForWorker = new Set<string>(); // "cpf-perFiscal"
 
+    const infoIRComplemTables = new Set([
+      "s5002_periodo_ded_dep",
+      "s5002_periodo_pensao",
+      "s5002_periodo_plano_saude",
+      "s5002_periodo_plano_saude_dep"
+    ]);
+
     for (const entry of candidates) {
-      if (entry.perApurEvento !== entry.perFiscal && entry.metadata?.nrRec1210Orig) {
-        adjustedReceipts.add(entry.metadata.nrRec1210Orig);
+      if (entry.perApurEvento !== entry.perFiscal && infoIRComplemTables.has(entry.origemTabela || "")) {
+        if (entry.metadata?.nrRec1210Orig) {
+          adjustedReceipts.add(entry.metadata.nrRec1210Orig);
+        }
         if (entry.cpf && entry.perFiscal) {
           adjustedPeriodsForWorker.add(`${entry.cpf}-${entry.perFiscal}`);
         }
@@ -388,52 +409,87 @@ export class FiscalEngine {
       }
     }
 
-    const infoIRComplemTables = new Set([
-      "s5002_periodo_ded_dep",
-      "s5002_periodo_pensao",
-      "s5002_periodo_plano_saude",
-      "s5002_periodo_plano_saude_dep"
-    ]);
+    // Process each adjusted worker and period granularly (hybrid: absence / succession / identity)
+    for (const workerPeriodKey of adjustedPeriodsForWorker) {
+      const [workerCpf, perFiscal] = workerPeriodKey.split("-");
 
-    for (const entry of candidates) {
-      const isOriginalDetail = entry.perApurEvento === entry.perFiscal && infoIRComplemTables.has(entry.origemTabela || "");
-      const originalRecibo = entry.metadata?.nrRecibo || entry.metadata?.recibo;
-      const workerPeriodKey = `${entry.cpf}-${entry.perFiscal}`;
+      // Filter candidates for this specific worker and perFiscal which belong to infoIRComplem
+      const groupEntries = candidates.filter(e => 
+        e.cpf === workerCpf && 
+        e.perFiscal === perFiscal &&
+        infoIRComplemTables.has(e.origemTabela || "")
+      );
 
-      const shouldDeactivate = 
-        (originalRecibo && adjustedReceipts.has(originalRecibo)) ||
-        (adjustedPeriodsForWorker.has(workerPeriodKey));
+      const originals = groupEntries.filter(e => e.perApurEvento === e.perFiscal);
+      const retros = groupEntries.filter(e => e.perApurEvento !== e.perFiscal);
 
-      if (isOriginalDetail && shouldDeactivate) {
-        // Marcado como sobreposto/substituído pelo bloco de ajuste de período anterior
-        entry.ativoFiscal = true;
-        entry.incluido = true;
-        entry.valorCompoeBase = false;
-        entry.statusFiscal = StatusFiscal.ATIVO;
-        entry.regraAplicada = "Precedência Complementar perAnt";
-        entry.motivoInclusao = "Lastro documental preservado de forma inativa (valor não compõe base) pela prevalência financeira do ajuste complementar.";
-        
-        if (!entry.historicoFiscal) {
-          entry.historicoFiscal = [];
+      // Map retros by business key
+      const retrosByBizKey = new Map<string, AuditEntry>();
+      for (const retro of retros) {
+        retrosByBizKey.set(this.getBusinessKey(retro), retro);
+      }
+
+      // Loop through originals to detect those that are absent or altered/identical
+      for (const orig of originals) {
+        const bizKey = this.getBusinessKey(orig);
+        const retroItem = retrosByBizKey.get(bizKey);
+
+        if (!retroItem) {
+          // A) AUSÊNCIA: Not present in the adjustment block
+          orig.ativoFiscal = true;
+          orig.incluido = true;
+          orig.valorCompoeBase = false;
+          orig.statusFiscal = StatusFiscal.ATIVO;
+          orig.regraAplicada = "Precedência Complementar perAnt (Ausência)";
+          orig.motivoInclusao = "Dedução revogada por ausência no XML complementar perAnt.";
+
+          if (!orig.historicoFiscal) {
+            orig.historicoFiscal = [];
+          }
+          orig.historicoFiscal.push({
+            origem: orig.origem || orig.origemTabela,
+            recibo: orig.metadata?.nrRecibo || orig.metadata?.recibo,
+            versao: String(orig.metadata?.versao || "0"),
+            regraAplicada: "Revogado por Ausência no Ajuste de Período Anterior (<perAnt>)",
+            timestamp: new Date().toISOString()
+          });
+        } else {
+          // B) PRESENT IN BOTH: Identical or Altered
+          const isIdentical = orig.valor === retroItem.valor;
+          orig.ativoFiscal = true;
+          orig.incluido = true;
+          orig.valorCompoeBase = false; // Original always inactive in favor of adjustment
+          orig.statusFiscal = StatusFiscal.ATIVO;
+          orig.regraAplicada = isIdentical 
+            ? "Precedência Complementar perAnt (Identico)" 
+            : "Precedência Complementar perAnt (Alterado)";
+          orig.motivoInclusao = isIdentical
+            ? "Lastro documental preservado de forma inativa pela prevalência do ajuste complementar idêntico."
+            : "Lastro documental preservado de forma inativa devido à alteração de valor/composição.";
+
+          if (!orig.historicoFiscal) {
+            orig.historicoFiscal = [];
+          }
+          orig.historicoFiscal.push({
+            origem: orig.origem || orig.origemTabela,
+            recibo: orig.metadata?.nrRecibo || orig.metadata?.recibo,
+            versao: String(orig.metadata?.versao || "0"),
+            regraAplicada: isIdentical 
+              ? "Sobreposto por Ajuste Idêntico de Período Anterior" 
+              : "Sobreposto por Ajuste Alterado de Período Anterior",
+            timestamp: new Date().toISOString()
+          });
         }
-        entry.historicoFiscal.push({
-          origem: entry.origem || entry.origemTabela,
-          recibo: originalRecibo,
-          versao: String(entry.metadata?.versao || "0"),
-          regraAplicada: "Sobreposto por Ajuste de Período Anterior (<perAnt>)",
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        // Se for um novo item de ajuste (ou seja, pertencente ao bloco perAnt), ele compõe o saldo final (valorCompoeBase = true)
-        const isRetroDetail = entry.perApurEvento !== entry.perFiscal && infoIRComplemTables.has(entry.origemTabela || "");
-        if (isRetroDetail) {
-          entry.ativoFiscal = true;
-          entry.incluido = true;
-          entry.valorCompoeBase = true;
-          entry.statusFiscal = StatusFiscal.RETIFICADO_COMPLEMENTAR;
-          entry.regraAplicada = "Retificação Complementar Resolvida (Ativa)";
-          entry.motivoInclusao = "Ajuste complementar do recibo de origem ativo.";
-        }
+      }
+
+      // Loop through retros: they are always active in favor of the adjustment
+      for (const retro of retros) {
+        retro.ativoFiscal = true;
+        retro.incluido = true;
+        retro.valorCompoeBase = true;
+        retro.statusFiscal = StatusFiscal.RETIFICADO_COMPLEMENTAR;
+        retro.regraAplicada = "Retificação Complementar Resolvida (Ativa)";
+        retro.motivoInclusao = "Ajuste complementar do recibo de origem ativo.";
       }
     }
   }
@@ -508,9 +564,11 @@ export class FiscalEngine {
             entry.valorCompoeBase = true;
           }
         } else if (entry.grupo === "ANALITICO" && entry.ativoFiscal !== false) {
-          entry.valorCompoeBase = true;
-          entry.regraAplicada = "Precedência Normativa - Preferência Granular Ativa";
-          entry.motivoInclusao = "Utilizado como fonte de composição primária de alta fidelidade.";
+          if (entry.valorCompoeBase !== false) {
+            entry.valorCompoeBase = true;
+            entry.regraAplicada = "Precedência Normativa - Preferência Granular Ativa";
+            entry.motivoInclusao = "Utilizado como fonte de composição primária de alta fidelidade.";
+          }
         }
       }
     }

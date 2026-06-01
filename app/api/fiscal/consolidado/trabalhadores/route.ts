@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { FiscalEngine } from "@/lib/fiscal/engine";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -72,7 +73,93 @@ export async function GET(req: Request) {
           }
         }
       });
-      return NextResponse.json(results);
+
+      // Obter trilha de auditoria para filtrar e computar registros detalhados consistentes
+      const auditTrail = await FiscalEngine.buildAuditTrail(targetEmpresaId, ano, mes);
+
+      const mappedResults = results.map((item: any) => {
+        const workerCpf = item.trabalhador?.cpf || item.eventoOrigem?.cpfBenef;
+        const workerEntries = auditTrail.filter((e: any) => 
+          e.cpf && e.cpf === workerCpf &&
+          e.incluido !== false && 
+          e.ativoFiscal !== false && 
+          e.valorCompoeBase !== false
+        );
+
+        // Somar os totais para este trabalhador do rastro da auditoria ativa
+        const totalPensao = workerEntries
+          .filter((e: any) => e.fiscalNature === "PENSAO")
+          .reduce((acc: number, curr: any) => acc + Number(curr.valor || 0), 0);
+
+        const totalDependentes = workerEntries
+          .filter((e: any) => e.fiscalNature === "DEPENDENTE")
+          .reduce((acc: number, curr: any) => acc + Number(curr.valor || 0), 0);
+
+        const totalPlanoSaude = workerEntries
+          .filter((e: any) => e.fiscalNature === "PLANO_SAUDE")
+          .reduce((acc: number, curr: any) => acc + Number(curr.valor || 0), 0);
+
+        // Extrair nomes reais dos dependentes mapeados no banco
+        const nameMap = new Map<string, string>();
+        item.eventoOrigem?.s5002?.periodosAnteriores?.forEach((pa: any) => {
+          pa.infoCR?.forEach((icr: any) => {
+            icr.deducoesDependente?.forEach((dd: any) => {
+              if (dd.cpfDep && dd.dependente?.nome) {
+                nameMap.set(dd.cpfDep, dd.dependente.nome);
+              }
+            });
+            icr.pensoes?.forEach((p: any) => {
+              if (p.cpfDep && p.dependente?.nome) {
+                nameMap.set(p.cpfDep, p.dependente.nome);
+              }
+            });
+          });
+          pa.planosSaude?.forEach((ps: any) => {
+            ps.dependentes?.forEach((dps: any) => {
+              if (dps.cpfDep && dps.dependente?.nome) {
+                nameMap.set(dps.cpfDep, dps.dependente.nome);
+              }
+            });
+          });
+        });
+
+        // Agrupar e somar os valores unificados por dependente
+        const dependentesMap = new Map<string, { nome: string, cpf: string, dedDep: number, pensao: number, planoSaude: number }>();
+
+        workerEntries.forEach((entry: any) => {
+          const cpfDep = entry.metadata?.cpfDep;
+          if (!cpfDep) return;
+
+          const existing = dependentesMap.get(cpfDep) || {
+            nome: nameMap.get(cpfDep) || entry.descricaoOficial?.replace(/^Dedução de Dependente:\s*/, "")?.replace(/^Pensão Alimentícia - Beneficiário:\s*/, "") || "DEPENDENTE",
+            cpf: cpfDep,
+            dedDep: 0,
+            pensao: 0,
+            planoSaude: 0
+          };
+
+          const value = Number(entry.valor || 0);
+          if (entry.fiscalNature === "DEPENDENTE") {
+            existing.dedDep += value;
+          } else if (entry.fiscalNature === "PENSAO") {
+            existing.pensao += value;
+          } else if (entry.fiscalNature === "PLANO_SAUDE") {
+            existing.planoSaude += value;
+          }
+
+          dependentesMap.set(cpfDep, existing);
+        });
+
+        return {
+          ...item,
+          vlrPensao: totalPensao,
+          vlrDependentes: totalDependentes,
+          vlrPlanoSaude: totalPlanoSaude,
+          dependentes: Array.from(dependentesMap.values())
+        };
+      });
+
+      return NextResponse.json(mappedResults);
     } else {
       const results = await prisma.s5002ConsolidadoAnual.findMany({
         where: {
@@ -121,18 +208,92 @@ export async function GET(req: Request) {
         }
       });
       
-      // Mapear os eventos para o formato que o frontend espera (emulando a estrutura do mensal)
-      const mappedResults = results.map(item => ({
-        ...item,
-        eventoOrigem: {
-          s5002: {
-            // Consolidar todos os periodosAnteriores do ano
-            periodosAnteriores: item.trabalhador?.s5002Eventos.flatMap(evt => 
-              evt.evento.s5002?.periodosAnteriores || []
-            ) || []
+      // Obter trilha de auditoria para o ano completo
+      const auditTrail = await FiscalEngine.buildAuditTrail(targetEmpresaId, ano);
+
+      const mappedResults = results.map(item => {
+        const workerCpf = item.trabalhador?.cpf;
+        const workerEntries = auditTrail.filter((e: any) => 
+          e.cpf && e.cpf === workerCpf &&
+          e.incluido !== false && 
+          e.ativoFiscal !== false && 
+          e.valorCompoeBase !== false
+        );
+
+        // Somar os totais para este trabalhador
+        const totalPensao = workerEntries
+          .filter((e: any) => e.fiscalNature === "PENSAO")
+          .reduce((acc: number, curr: any) => acc + Number(curr.valor || 0), 0);
+
+        const totalDependentes = workerEntries
+          .filter((e: any) => e.fiscalNature === "DEPENDENTE")
+          .reduce((acc: number, curr: any) => acc + Number(curr.valor || 0), 0);
+
+        const totalPlanoSaude = workerEntries
+          .filter((e: any) => e.fiscalNature === "PLANO_SAUDE")
+          .reduce((acc: number, curr: any) => acc + Number(curr.valor || 0), 0);
+
+        // Extrair nomes reais dos dependentes
+        const nameMap = new Map<string, string>();
+        item.trabalhador?.s5002Eventos?.forEach((evt: any) => {
+          evt.evento?.s5002?.periodosAnteriores?.forEach((pa: any) => {
+            pa.infoCR?.forEach((icr: any) => {
+              icr.deducoesDependente?.forEach((dd: any) => {
+                if (dd.cpfDep && dd.dependente?.nome) {
+                  nameMap.set(dd.cpfDep, dd.dependente.nome);
+                }
+              });
+              icr.pensoes?.forEach((p: any) => {
+                if (p.cpfDep && p.dependente?.nome) {
+                  nameMap.set(p.cpfDep, p.dependente.nome);
+                }
+              });
+            });
+            pa.planosSaude?.forEach((ps: any) => {
+              ps.dependentes?.forEach((dps: any) => {
+                if (dps.cpfDep && dps.dependente?.nome) {
+                  nameMap.set(dps.cpfDep, dps.dependente.nome);
+                }
+              });
+            });
+          });
+        });
+
+        // Agrupar por dependente
+        const dependentesMap = new Map<string, { nome: string, cpf: string, dedDep: number, pensao: number, planoSaude: number }>();
+
+        workerEntries.forEach((entry: any) => {
+          const cpfDep = entry.metadata?.cpfDep;
+          if (!cpfDep) return;
+
+          const existing = dependentesMap.get(cpfDep) || {
+            nome: nameMap.get(cpfDep) || entry.descricaoOficial?.replace(/^Dedução de Dependente:\s*/, "")?.replace(/^Pensão Alimentícia - Beneficiário:\s*/, "") || "DEPENDENTE",
+            cpf: cpfDep,
+            dedDep: 0,
+            pensao: 0,
+            planoSaude: 0
+          };
+
+          const value = Number(entry.valor || 0);
+          if (entry.fiscalNature === "DEPENDENTE") {
+            existing.dedDep += value;
+          } else if (entry.fiscalNature === "PENSAO") {
+            existing.pensao += value;
+          } else if (entry.fiscalNature === "PLANO_SAUDE") {
+            existing.planoSaude += value;
           }
-        }
-      }));
+
+          dependentesMap.set(cpfDep, existing);
+        });
+
+        return {
+          ...item,
+          vlrPensao: totalPensao,
+          vlrDependentes: totalDependentes,
+          vlrPlanoSaude: totalPlanoSaude,
+          dependentes: Array.from(dependentesMap.values())
+        };
+      });
 
       return NextResponse.json(mappedResults);
     }

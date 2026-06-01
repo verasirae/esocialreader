@@ -323,6 +323,21 @@ function YearSelectionView({ empresa, years, onSelectYear }: any) {
   );
 }
 
+const CONSOLIDADO_MONTHS = [
+  { id: "01", label: "JAN" },
+  { id: "02", label: "FEV" },
+  { id: "03", label: "MAR" },
+  { id: "04", label: "ABR" },
+  { id: "05", label: "MAI" },
+  { id: "06", label: "JUN" },
+  { id: "07", label: "JUL" },
+  { id: "08", label: "AGO" },
+  { id: "09", label: "SET" },
+  { id: "10", label: "OUT" },
+  { id: "11", label: "NOV" },
+  { id: "12", label: "DEZ" },
+];
+
 function DetailedConsolidationView({ 
   empresa, 
   selectedYear, 
@@ -353,22 +368,38 @@ function DetailedConsolidationView({
   isLoadingPlanoSaude,
   onBack 
 }: any) {
-  const months = [
-    { id: "01", label: "JAN" },
-    { id: "02", label: "FEV" },
-    { id: "03", label: "MAR" },
-    { id: "04", label: "ABR" },
-    { id: "05", label: "MAI" },
-    { id: "06", label: "JUN" },
-    { id: "07", label: "JUL" },
-    { id: "08", label: "AGO" },
-    { id: "09", label: "SET" },
-    { id: "10", label: "OUT" },
-    { id: "11", label: "NOV" },
-    { id: "12", label: "DEZ" },
-  ];
+  const [isTabLoading, setIsTabLoading] = useState(false);
 
-  const currentMonthLabel = selectedMonth ? months.find(m => m.id === selectedMonth)?.label : null;
+  useEffect(() => {
+    setIsTabLoading(true);
+    const timer = setTimeout(() => {
+      setIsTabLoading(false);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [activeTab, selectedMonth, selectedYear]);
+
+  const currentMonthLabel = selectedMonth ? CONSOLIDADO_MONTHS.find(m => m.id === selectedMonth)?.label : null;
+
+  const tabLoadingMessages: Record<string, string> = {
+    "Beneficiários": "Carregando demonstrativo de beneficiários...",
+    "Detalhamento por trabalhador": "Carregando detalhamento por trabalhador...",
+    "Rendimentos e retenções": "Carregando detalhamento de rendimentos...",
+    "Compensação judicial": "Carregando compensações judiciais...",
+    "Exigibilidade suspensa": "Carregando exigibilidades suspensas...",
+    "Fundos de investimentos": "Carregando fundos de investimentos...",
+    "Processos judiciais": "Carregando processos judiciais...",
+    "Remessa ao exterior": "Carregando remessas ao exterior...",
+    "Sociedades em conta de participação": "Carregando sociedades em conta de participação...",
+    "Plano de saúde": "Carregando dados do plano de saúde..."
+  };
+
+  const currentTabLoading = useMemo(() => {
+    if (isTabLoading) return true;
+    if (activeTab === "Detalhamento por trabalhador" && isLoadingTrabalhadores) return true;
+    if (activeTab === "Rendimentos e retenções" && isLoadingRendimentos) return true;
+    if (activeTab === "Plano de saúde" && isLoadingPlanoSaude) return true;
+    return false;
+  }, [isTabLoading, activeTab, isLoadingTrabalhadores, isLoadingRendimentos, isLoadingPlanoSaude]);
 
   const audits = useMemo(() => {
     const list = [];
@@ -404,7 +435,7 @@ function DetailedConsolidationView({
     const missingMonthsCodes = allMonths.filter(m => !importedMonths.includes(m));
 
     if (missingMonthsCodes.length > 0) {
-      const monthNames = missingMonthsCodes.map(m => months.find(mo => mo.id === m)?.label).join(", ");
+      const monthNames = missingMonthsCodes.map(m => CONSOLIDADO_MONTHS.find(mo => mo.id === m)?.label).join(", ");
       list.push({
         id: "missing-periods-global",
         tab: "Períodos",
@@ -441,7 +472,7 @@ function DetailedConsolidationView({
     }
     
     return list;
-  }, [yearData, selectedYear, months, rendimentosData]);
+  }, [yearData, selectedYear, rendimentosData]);
 
   return (
     <motion.div 
@@ -558,7 +589,7 @@ function DetailedConsolidationView({
           >
             {selectedYear}
           </button>
-          {months.map(m => {
+          {CONSOLIDADO_MONTHS.map(m => {
             const monthStatus = yearData?.months?.find((item: any) => item.periodo.endsWith(`-${m.id}`));
             const hasData = monthStatus?.status !== "vazio";
 
@@ -618,7 +649,14 @@ function DetailedConsolidationView({
             </div>
 
             <div className="p-6">
-              {activeTab === "Rendimentos e retenções" ? (
+              {currentTabLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4 min-h-[300px]">
+                  <Loader2 className="animate-spin text-primary w-10 h-10" />
+                  <p className="text-secondary text-xs italic font-medium">
+                    {tabLoadingMessages[activeTab] || "Carregando dados..."}
+                  </p>
+                </div>
+              ) : activeTab === "Rendimentos e retenções" ? (
                 !isRendimentosDetailed ? (
                   <RendimentosSummaryTab data={rendimentosData} isLoading={isLoadingRendimentos} onShowDetail={() => setIsRendimentosDetailed(true)} />
                 ) : (
@@ -2150,42 +2188,50 @@ function TrabalhadoresTab({ data, isLoading, selectedYear, selectedMonth }: any)
           <tbody className="text-[11px]">
             {data.map((item: any, idx: number) => {
               // Processar dados dos dependentes para este trabalhador
-              const dependentesMap = new Map<string, any>();
+              let depsList: any[] = [];
               let totalPlanoSaudeDep = 0;
 
-              // Extrair do evento de origem
-              const pas = item.eventoOrigem?.s5002?.periodosAnteriores || [];
-              pas.forEach((pa: any) => {
-                // Info CR (Deduções e Pensões)
-                pa.infoCR?.forEach((icr: any) => {
-                  icr.deducoesDependente?.forEach((dd: any) => {
-                    const key = dd.dependenteId || dd.cpfDep || "unknown";
-                    const existing = dependentesMap.get(key) || { nome: dd.dependente?.nome || "DEPENDENTE", cpf: dd.cpfDep, dedDep: 0, pensao: 0, planoSaude: 0 };
-                    existing.dedDep += Number(dd.vlrDedDep || 0);
-                    dependentesMap.set(key, existing);
+              if (item.dependentes) {
+                depsList = item.dependentes;
+                totalPlanoSaudeDep = depsList.reduce((acc: number, curr: any) => acc + Number(curr.planoSaude || 0), 0);
+              } else {
+                const dependentesMap = new Map<string, any>();
+
+                // Extrair do evento de origem (fallback para compatibilidade)
+                const pas = item.eventoOrigem?.s5002?.periodosAnteriores || [];
+                pas.forEach((pa: any) => {
+                  // Info CR (Deduções e Pensões)
+                  pa.infoCR?.forEach((icr: any) => {
+                    icr.deducoesDependente?.forEach((dd: any) => {
+                      const key = dd.dependenteId || dd.cpfDep || "unknown";
+                      const existing = dependentesMap.get(key) || { nome: dd.dependente?.nome || "DEPENDENTE", cpf: dd.cpfDep, dedDep: 0, pensao: 0, planoSaude: 0 };
+                      existing.dedDep += Number(dd.vlrDedDep || 0);
+                      dependentesMap.set(key, existing);
+                    });
+                    icr.pensoes?.forEach((p: any) => {
+                      const key = p.dependenteId || p.cpfDep || "unknown";
+                      const existing = dependentesMap.get(key) || { nome: p.dependente?.nome || "DEPENDENTE", cpf: p.cpfDep, dedDep: 0, pensao: 0, planoSaude: 0 };
+                      existing.pensao += Number(p.vlrDedPenAlim || 0);
+                      dependentesMap.set(key, existing);
+                    });
                   });
-                  icr.pensoes?.forEach((p: any) => {
-                    const key = p.dependenteId || p.cpfDep || "unknown";
-                    const existing = dependentesMap.get(key) || { nome: p.dependente?.nome || "DEPENDENTE", cpf: p.cpfDep, dedDep: 0, pensao: 0, planoSaude: 0 };
-                    existing.pensao += Number(p.vlrDedPenAlim || 0);
-                    dependentesMap.set(key, existing);
+
+                  // Planos de Saúde
+                  pa.planosSaude?.forEach((ps: any) => {
+                    ps.dependentes?.forEach((dps: any) => {
+                      const key = dps.dependenteId || dps.cpfDep || "unknown";
+                      const val = Number(dps.vlrSaudeDep || 0);
+                      const existing = dependentesMap.get(key) || { nome: dps.dependente?.nome || "DEPENDENTE", cpf: dps.cpfDep, dedDep: 0, pensao: 0, planoSaude: 0 };
+                      existing.planoSaude += val;
+                      totalPlanoSaudeDep += val;
+                      dependentesMap.set(key, existing);
+                    });
                   });
                 });
 
-                // Planos de Saúde
-                pa.planosSaude?.forEach((ps: any) => {
-                  ps.dependentes?.forEach((dps: any) => {
-                    const key = dps.dependenteId || dps.cpfDep || "unknown";
-                    const val = Number(dps.vlrSaudeDep || 0);
-                    const existing = dependentesMap.get(key) || { nome: dps.dependente?.nome || "DEPENDENTE", cpf: dps.cpfDep, dedDep: 0, pensao: 0, planoSaude: 0 };
-                    existing.planoSaude += val;
-                    totalPlanoSaudeDep += val;
-                    dependentesMap.set(key, existing);
-                  });
-                });
-              });
+                depsList = Array.from(dependentesMap.values());
+              }
 
-              const depsList = Array.from(dependentesMap.values());
               const vlrPlanoSaudeTitular = Math.max(0, Number(item.vlrPlanoSaude || 0) - totalPlanoSaudeDep);
 
               return (
@@ -2205,8 +2251,8 @@ function TrabalhadoresTab({ data, isLoading, selectedYear, selectedMonth }: any)
                     </td>
                     <td className="py-3 px-4 text-right font-mono font-bold text-on-surface">{format(item.vlrRendTrib)}</td>
                     <td className="py-3 px-4 text-right font-mono text-on-surface">{format(item.vlrPrevOficial)}</td>
-                    <td className="py-3 px-4 text-right font-mono text-secondary opacity-50">---</td>
-                    <td className="py-3 px-4 text-right font-mono text-secondary opacity-50">---</td>
+                    <td className="py-3 px-4 text-right font-mono text-on-surface">{Number(item.vlrDependentes || 0) > 0 ? format(item.vlrDependentes) : "---"}</td>
+                    <td className="py-3 px-4 text-right font-mono text-on-surface">{Number(item.vlrPensao || 0) > 0 ? format(item.vlrPensao) : "---"}</td>
                     <td className="py-3 px-4 text-right font-mono text-on-surface">{format(vlrPlanoSaudeTitular)}</td>
                     <td className="py-3 px-6 text-right font-mono font-bold text-primary">{format(item.vlrIrrf)}</td>
                   </tr>
