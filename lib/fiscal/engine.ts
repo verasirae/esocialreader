@@ -435,24 +435,12 @@ export class FiscalEngine {
         const retroItem = retrosByBizKey.get(bizKey);
 
         if (!retroItem) {
-          // A) AUSÊNCIA: Not present in the adjustment block
-          orig.ativoFiscal = true;
-          orig.incluido = true;
+          orig.ativoFiscal = false;
+          orig.incluido = false;
           orig.valorCompoeBase = false;
-          orig.statusFiscal = StatusFiscal.ATIVO;
-          orig.regraAplicada = "Precedência Complementar perAnt (Ausência)";
-          orig.motivoInclusao = "Dedução revogada por ausência no XML complementar perAnt.";
-
-          if (!orig.historicoFiscal) {
-            orig.historicoFiscal = [];
-          }
-          orig.historicoFiscal.push({
-            origem: orig.origem || orig.origemTabela,
-            recibo: orig.metadata?.nrRecibo || orig.metadata?.recibo,
-            versao: String(orig.metadata?.versao || "0"),
-            regraAplicada: "Revogado por Ausência no Ajuste de Período Anterior (<perAnt>)",
-            timestamp: new Date().toISOString()
-          });
+          orig.statusFiscal = StatusFiscal.RETIFICADO_COMPLEMENTAR;
+          orig.regraAplicada = "Retificação Complementar - Dependente Excluído";
+          orig.motivoExclusao = "Dependente removido no XML complementar.";
         } else {
           // B) PRESENT IN BOTH: Identical or Altered
           const isIdentical = orig.valor === retroItem.valor;
@@ -912,6 +900,99 @@ export class FiscalEngine {
         const isSemVinculo = evt.demonstrativos[0]?.codCateg?.startsWith("7") || false;
         const defaultCrCode = isSemVinculo ? "058806" : "056107";
 
+        // Deduções por dependente de períodos anteriores que foram ajustadas/zeradas no XML retificador
+        for (const dep of pa.dependentes) {
+          const cpfDep = dep.cpfDep;
+          if (!cpfDep) continue;
+
+          // Verificamos se há alguma dedução detalhada para este CPF de dependente no período anterior atual
+          const hasDeducaoNestePer = pa.infoCR.some(icr => 
+            icr.deducoesDependente.some(dd => dd.cpfDep === cpfDep)
+          );
+
+          if (!hasDeducaoNestePer) {
+            // Se não tem dedução detalhada neste período, procuramos se algum outro evento do mesmo trabalhador
+            // possui dedução para este dependente no mesmo perFiscal.
+            let originalDeductions: { tpRend: string; cr: string; valor: number }[] = [];
+
+            for (const otherEvt of s5002Eventos) {
+              const sameWorker = (evt.trabalhadorId && otherEvt.trabalhadorId === evt.trabalhadorId) ||
+                                 (workerCpf && otherEvt.trabalhador?.cpf === workerCpf);
+              if (!sameWorker) continue;
+              
+              for (const otherPa of otherEvt.periodosAnteriores) {
+                const otherPerFiscal = this.resolvePeriodoFiscalReal(otherEvt.perApur, otherPa.perRefAjuste);
+                if (otherPerFiscal !== perFiscal) continue;
+
+                for (const otherIcr of otherPa.infoCR) {
+                  for (const otherDd of otherIcr.deducoesDependente) {
+                    if (otherDd.cpfDep === cpfDep) {
+                      const otherCrCode = otherIcr.tpCR || (otherEvt.demonstrativos[0]?.totais[0]?.crMen) || defaultCrCode;
+                      originalDeductions.push({
+                        tpRend: otherDd.tpRend,
+                        cr: otherCrCode,
+                        valor: Number(otherDd.vlrDedDep)
+                      });
+                    }
+                  }
+                }
+              }
+            }
+
+            // Deduplicate original deductions by tpRend to avoid generating duplicate zero-out candidates
+            const uniqueOriginalDeds = Array.from(
+              new Map(originalDeductions.map(item => [item.tpRend, item])).values()
+            );
+
+            for (const origDed of uniqueOriginalDeds) {
+              const debClassified = FiscalEngine.classifyDeducao(origDed.tpRend);
+              candidates.push({
+                trabalhador: workerName,
+                cpf: workerCpf,
+                perApur: perFiscal,
+                origemTabela: "s5002_periodo_ded_dep",
+                origemId: `adj-zero-${dep.id}-${origDed.tpRend}`,
+                categoriaFiscal: "Dedução por Dependente",
+                fiscalNature: debClassified.nature,
+                codigoOficial: origDed.tpRend,
+                descricaoOficial: `${debClassified.label} (CPF Dep: ${cpfDep}) [Corrigido para Zero - Retirada de Dedução IRRF]`,
+                cr: origDed.cr,
+                valor: 0,
+                metadata: { 
+                  perRefAjuste: pa.perRefAjuste, 
+                  cpfDep: cpfDep, 
+                  tpRendOriginal: origDed.tpRend,
+                  recibo: xmlRecibo,
+                  nrRecibo: xmlRecibo,
+                  nrReciboOrig: evt.evento?.nrReciboOrig || "",
+                  indRetif: evt.evento?.indRetif || 0,
+                  eventoId: evt.evento?.id || "",
+                  nrRec1210Orig: pa.nrRec1210Orig || ""
+                },
+                tpCR: origDed.cr,
+                tpInfoIR: origDed.tpRend,
+                origem: "s5002_periodo_ded_dep",
+                grupo: "ANALITICO",
+                ativoFiscal: true,
+                statusFiscal: StatusFiscal.ATIVO,
+                perFiscal,
+                perApurEvento,
+                incluido: true,
+                valorOriginal: 0,
+                regraAplicada: "Ajuste de Período Anterior - Zeramento de Dedução por Dependente",
+                motivoInclusao: "Zeramento de dedução por dependente conforme ajuste/retificação.",
+                historicoFiscal: [{
+                  origem: "S-5002 dedDepen (Zeramento por Retirada)",
+                  recibo: xmlRecibo,
+                  versao: xmlVersao,
+                  regraAplicada: "Zeramento de Dedução por Dependente por ausência de dedDepen",
+                  timestamp: xmlTimestamp
+                }]
+              });
+            }
+          }
+        }
+
         for (const icr of pa.infoCR) {
           let crCode = icr.tpCR || (evt.demonstrativos[0]?.totais[0]?.crMen) || defaultCrCode;
           if (!isSemVinculo && crCode.startsWith("0588")) {
@@ -923,6 +1004,9 @@ export class FiscalEngine {
           // Deduções Dependente
           for (const dd of icr.deducoesDependente) {
             const debClassified = FiscalEngine.classifyDeducao(dd.tpRend);
+            const isRemoval = (dd as any).excluidoRetificacao === true;
+            const valor = isRemoval ? 0 : Number(dd.vlrDedDep);
+
             candidates.push({
               trabalhador: workerName,
               cpf: workerCpf,
@@ -934,7 +1018,7 @@ export class FiscalEngine {
               codigoOficial: dd.tpRend,
               descricaoOficial: `${debClassified.label} (CPF Dep: ${dd.cpfDep || "---"})`,
               cr: crCode,
-              valor: Number(dd.vlrDedDep),
+              valor: valor,
               metadata: { 
                 perRefAjuste: pa.perRefAjuste, 
                 cpfDep: dd.cpfDep, 
@@ -955,14 +1039,20 @@ export class FiscalEngine {
               perFiscal,
               perApurEvento,
               incluido: true,
-              valorOriginal: Number(dd.vlrDedDep),
-              regraAplicada: "Detalhamento de Período Anterior (<dedDepen>)",
-              motivoInclusao: "Detalhamento de dependente individual.",
+              valorOriginal: valor,
+              regraAplicada: isRemoval
+                ? "Retificação Fiscal - Dependente Removido"
+                : "Detalhamento de Período Anterior (<dedDepen>)",
+              motivoInclusao: isRemoval
+                ? "Dependente removido por retificação do evento original."
+                : "Detalhamento de dependente individual.",
               historicoFiscal: [{
                 origem: "S-5002 dedDepen",
                 recibo: xmlRecibo,
                 versao: xmlVersao,
-                regraAplicada: "Detalhamento de Período Anterior (<dedDepen>)",
+                regraAplicada: isRemoval
+                  ? "Retificação Fiscal - Dependente Removido"
+                  : "Detalhamento de Período Anterior (<dedDepen>)",
                 timestamp: xmlTimestamp
               }]
             });

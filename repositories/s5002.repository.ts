@@ -150,6 +150,34 @@ export class S5002Repository {
           ? parsedData.infoIRComplemList
           : (parsedData.infoIRComplem ? [parsedData.infoIRComplem] : []);
 
+        const previousPeriods =
+          parsedData.indRetif === 2
+            ? await tx.s5002PeriodoAnterior.findMany({
+                where: {
+                  s5002Evento: {
+                    evento: {
+                      nrRecibo: {
+                        in: blocks
+                          .flatMap(b => {
+                            if (!b.perAnt) return [];
+                            return Array.isArray(b.perAnt) ? b.perAnt : [b.perAnt];
+                          })
+                          .map(p => p.nrRec1210Orig)
+                          .filter(Boolean) as string[]
+                      }
+                    }
+                  }
+                },
+                include: {
+                  infoCR: {
+                    include: {
+                      deducoesDependente: true
+                    }
+                  }
+                }
+              })
+            : [];
+
         if (blocks.length > 0) {
           // 3a. Sincronizar DependenteMaster
           if (esocialEvento.trabalhadorId) {
@@ -249,7 +277,7 @@ export class S5002Repository {
             });
 
             // Coleta InfoIrCr (Deduções e Pensões)
-            const resolvedCRs = (block.infoIrCr || []).map(cr => {
+            const resolvedCRs: any[] = (block.infoIrCr || []).map(cr => {
               const deducoesDep = (cr.dedDepen || []).map(dd => {
                 const cpfDepNorm = normalizeCpf(dd.cpfDep);
                 const depMasterId = depMasterMap.get(cpfDepNorm) || null;
@@ -278,6 +306,45 @@ export class S5002Repository {
                 pensoes: { create: pensoes }
               };
             });
+
+            const deducoesAtuais = new Set(
+              resolvedCRs.flatMap(cr =>
+                cr.deducoesDependente.create.map(
+                  (d: any) => `${d.cpfDep}_${d.tpRend}`
+                )
+              )
+            );
+
+            const originalPeriod = previousPeriods.find(
+              p => p.nrRec1210Orig === nrRec1210Orig
+            );
+
+            for (const infoCR of originalPeriod?.infoCR || []) {
+              for (const ded of infoCR.deducoesDependente) {
+                const key = `${ded.cpfDep}_${ded.tpRend}`;
+                if (!deducoesAtuais.has(key)) {
+                  let resolvedCR = resolvedCRs.find(rcr => rcr.tpCR === String(infoCR.tpCR));
+                  if (!resolvedCR) {
+                    resolvedCR = {
+                      tpCR: String(infoCR.tpCR),
+                      deducoesDependente: { create: [] },
+                      pensoes: { create: [] }
+                    };
+                    resolvedCRs.push(resolvedCR);
+                  }
+                  
+                  const cpfDepNorm = normalizeCpf(ded.cpfDep || "");
+                  const depMasterId = depMasterMap.get(cpfDepNorm) || null;
+                  resolvedCR.deducoesDependente.create.push({
+                    dependenteId: depMasterId,
+                    cpfDep: cpfDepNorm,
+                    tpRend: ded.tpRend,
+                    vlrDedDep: 0,
+                    excluidoRetificacao: true
+                  });
+                }
+              }
+            }
 
             // Coleta Planos Saude
             const resolvedPlans = (block.planSaude || []).map(plan => {

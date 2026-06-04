@@ -461,6 +461,8 @@ model S5002PeriodoDedDep {
 
   vlrDedDep             Decimal                   @db.Decimal(14,2) @map("vlr_ded_dep")
 
+  excluidoRetificacao   Boolean                   @default(false) @map("excluido_retificacao")
+
   @@map("s5002_periodo_ded_dep")
 }
 
