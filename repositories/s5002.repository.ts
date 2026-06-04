@@ -382,6 +382,32 @@ export class S5002Repository {
                 planosSaude: { create: resolvedPlans }
               }
             });
+
+            if (isRetro && nrRec1210Orig) {
+              // Monta lista de deduções ajustadas para comparação
+              const adjustedDedDepFlat = (block.infoIrCr || []).flatMap(cr =>
+                (cr.dedDepen || []).map(dd => ({
+                  cpfDep: normalizeCpf(dd.cpfDep),
+                  tpRend: dd.tpRend,
+                  vlrDedDep: Number(dd.vlrDedDep)
+                }))
+              );
+
+              // Monta lista de dependentes com status depIRRF do bloco ajustado
+              const adjustedDepsFlat = (block.ideDep || []).map(dep => ({
+                cpfDep: normalizeCpf(dep.cpfDep),
+                depIRRF: dep.depIRRF === "S",
+                tpDep: dep.tpDep
+              }));
+
+              await this.syncOriginalEventAnalytics(
+                tx,
+                nrRec1210Orig,
+                String(perRefAjuste),
+                adjustedDepsFlat,
+                adjustedDedDepFlat
+              );
+            }
           }
         }
 
@@ -414,6 +440,101 @@ export class S5002Repository {
         console.error("[S5002Repository] DETALHE VALIDACAO PRISMA:", err.message);
       }
       throw err;
+    }
+  }
+
+  /**
+   * Sincroniza os registros analíticos dos eventos ORIGINAIS cujos períodos
+   * foram ajustados pelo bloco <perAnt> do XML de ajuste/retificação.
+   *
+   * Regra fiscal:
+   *  - O XML de ajuste é SUBSTITUTIVO TOTAL para o período referenciado.
+   *  - Dependentes ausentes no bloco ajustado → dep_irrf = false
+   *  - Dependentes ausentes em dedDepen → vlr_ded_dep deve ser zerado (ou marcado)
+   *  - Dependentes presentes → atualiza com os novos valores
+   */
+  private async syncOriginalEventAnalytics(
+    tx: any,
+    nrRec1210Orig: string,
+    perRefAjuste: string,
+    adjustedDeps: Array<{ cpfDep: string; depIRRF: boolean; tpDep?: string }>,
+    adjustedDedDep: Array<{ cpfDep: string; tpRend: string; vlrDedDep: number }>
+  ) {
+    // 1. Localiza o evento original pelo nrRecibo
+    const originalEvento = await tx.esocialEvento.findFirst({
+      where: { nrRecibo: nrRec1210Orig },
+      include: { s5002: true }
+    });
+
+    if (!originalEvento?.s5002) return;
+
+    // 2. Localiza o S5002PeriodoAnterior do evento original para este perRefAjuste
+    const originalPeriodos = await tx.s5002PeriodoAnterior.findMany({
+      where: {
+        s5002EventoId: originalEvento.s5002.id,
+        perRefAjuste: perRefAjuste
+      },
+      include: {
+        dependentes: true,
+        infoCR: {
+          include: {
+            deducoesDependente: true
+          }
+        }
+      }
+    });
+
+    if (originalPeriodos.length === 0) return;
+
+    // 3. Monta sets de CPFs que continuam deduzindo no ajuste
+    const cpfsQueDeduzemNoAjuste = new Set(
+      adjustedDedDep.map(d => d.cpfDep)
+    );
+
+    const cpfsComDepIRRFNoAjuste = new Set(
+      adjustedDeps.filter(d => d.depIRRF).map(d => d.cpfDep)
+    );
+
+    for (const periodo of originalPeriodos) {
+      // 4. Atualiza dep_irrf nos S5002PeriodoDependente originais
+      for (const dep of periodo.dependentes) {
+        if (!dep.cpfDep) continue;
+        const novoDepIRRF = cpfsComDepIRRFNoAjuste.has(dep.cpfDep);
+        if (dep.depIRRF !== novoDepIRRF) {
+          await tx.s5002PeriodoDependente.update({
+            where: { id: dep.id },
+            data: { depIRRF: novoDepIRRF }
+          });
+        }
+      }
+
+      // 5. Atualiza/zera vlr_ded_dep nos S5002PeriodoDedDep originais
+      for (const infoCR of periodo.infoCR) {
+        for (const ded of infoCR.deducoesDependente) {
+          if (!ded.cpfDep) continue;
+
+          const ajuste = adjustedDedDep.find(
+            a => a.cpfDep === ded.cpfDep && a.tpRend === ded.tpRend
+          );
+
+          if (!ajuste) {
+            // CPF saiu completamente do dedDepen → zera
+            await tx.s5002PeriodoDedDep.update({
+              where: { id: ded.id },
+              data: {
+                vlrDedDep: 0,
+                excluidoRetificacao: true
+              }
+            });
+          } else if (Number(ded.vlrDedDep) !== ajuste.vlrDedDep) {
+            // Valor mudou → atualiza
+            await tx.s5002PeriodoDedDep.update({
+              where: { id: ded.id },
+              data: { vlrDedDep: ajuste.vlrDedDep }
+            });
+          }
+        }
+      }
     }
   }
 }
