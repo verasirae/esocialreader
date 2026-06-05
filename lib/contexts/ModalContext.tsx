@@ -15,6 +15,10 @@ interface ModalContextType {
   editingOperadora: any | null;
   openRegisterOperadoraModal: (operadora?: any) => void;
   closeRegisterOperadoraModal: () => void;
+  isSidebarCollapsed: boolean;
+  setIsSidebarCollapsed: (collapsed: boolean) => void;
+  isMobileMenuOpen: boolean;
+  setIsMobileMenuOpen: (open: boolean) => void;
 }
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
@@ -28,6 +32,9 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
 
   const [isRegisterOperadoraModalOpen, setIsRegisterOperadoraModalOpen] = useState(false);
   const [editingOperadora, setEditingOperadora] = useState<any | null>(null);
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const openRegisterEmpresaModal = (empresa?: any) => {
     setEditingEmpresa(empresa || null);
@@ -70,7 +77,11 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
         isRegisterOperadoraModalOpen,
         editingOperadora,
         openRegisterOperadoraModal,
-        closeRegisterOperadoraModal
+        closeRegisterOperadoraModal,
+        isSidebarCollapsed,
+        setIsSidebarCollapsed,
+        isMobileMenuOpen,
+        setIsMobileMenuOpen
       }}
     >
       {children}

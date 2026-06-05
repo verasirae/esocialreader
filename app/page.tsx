@@ -240,7 +240,7 @@ export default function Dashboard() {
         </section>
       )}
 
-      <section className="grid grid-cols-4 gap-md">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
         <div className="card p-lg flex flex-col gap-xs border-l-4 border-primary">
           <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">Trabalhadores Identificados</span>
           <span className="text-2xl font-black text-on-surface">{summaryStats.totalWorkers}</span>
@@ -269,7 +269,20 @@ export default function Dashboard() {
       </section>
 
       {/* Ações Rápidas */}
-      <section className={cn("flex gap-md transition-all", isUploading && "opacity-50 pointer-events-none grayscale-[0.5]")}>
+      <section className={cn("grid grid-cols-1 sm:grid-cols-3 gap-md transition-all", isUploading && "opacity-50 pointer-events-none grayscale-[0.5]")}>
+        <Link 
+          href="/reinf" 
+          className="card p-md flex items-center gap-4 hover:bg-surface-container transition-all border-none bg-surface-container/30 px-6 py-4"
+        >
+          <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-600">
+            <FileCode2 size={20} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">EFD-REINF</span>
+            <span className="text-xs font-bold">Importar & Prestadores</span>
+          </div>
+        </Link>
+
         <Link 
           href="/esocial/tabelas" 
           className="card p-md flex items-center gap-4 hover:bg-surface-container transition-all border-none bg-surface-container/30 px-6 py-4"
@@ -391,8 +404,8 @@ export default function Dashboard() {
       </section>
 
       {/* Sección Informativa (Timeline Audit) */}
-      <section className="grid grid-cols-12 gap-lg mt-lg">
-         <div className="col-span-8 flex flex-col gap-md">
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-lg mt-lg">
+         <div className="col-span-1 lg:col-span-8 flex flex-col gap-md">
             <div className="flex justify-between items-center">
               <h3 className="text-[10px] font-black text-secondary uppercase tracking-widest flex items-center gap-2">
                 <History size={14} />
@@ -472,7 +485,7 @@ export default function Dashboard() {
                </div>
             </div>
          </div>
-         <div className={cn("col-span-4 flex flex-col gap-lg transition-all", isUploading && "opacity-50 pointer-events-none")}>
+         <div className={cn("col-span-1 lg:col-span-4 flex flex-col gap-lg transition-all", isUploading && "opacity-50 pointer-events-none")}>
           <div className="bg-error/5 border border-error/20 p-6 rounded-sm">
              <div className="flex items-center gap-2 text-error mb-4">
                 <AlertTriangle size={20} />

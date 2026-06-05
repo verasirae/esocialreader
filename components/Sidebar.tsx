@@ -15,11 +15,18 @@ import {
   UserCog, 
   Settings, 
   HelpCircle,
-  Calendar
- } from "lucide-react";
+  ChevronLeft,
+  ChevronRight,
+  Plus, 
+  UserPlus, 
+  ShieldPlus,
+  X,
+  LogOut,
+  Database
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
-import { Plus, UserPlus, ShieldPlus } from "lucide-react";
+import { useAuth } from "@/lib/contexts/AuthContext";
 
 const menuItems = [
   { icon: Grid2X2, label: "Dashboard", href: "/" },
@@ -27,6 +34,7 @@ const menuItems = [
   { icon: Users, label: "Trabalhadores", href: "/trabalhadores" },
   { icon: Stethoscope, label: "Operadoras de Saúde", href: "/operadoras" },
   { icon: ShieldCheck, label: "Consolidação Fiscal", href: "/consolidacao" },
+  { icon: FileText, label: "EFD-REINF", href: "/reinf" },
   { icon: AlertTriangle, label: "Pendências", href: "/pendencias" },
   { icon: History, label: "Histórico de XML", href: "/history" },
   { icon: ShieldCheck, label: "Auditoria e Timeline", href: "/audit" },
@@ -41,85 +49,231 @@ const footerItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { openRegisterEmpresaModal, openRegisterTrabalhadorModal, openRegisterOperadoraModal } = useModals();
+  const { user, logout } = useAuth();
+  const { 
+    openRegisterEmpresaModal, 
+    openRegisterTrabalhadorModal, 
+    openRegisterOperadoraModal,
+    isSidebarCollapsed,
+    setIsSidebarCollapsed,
+    isMobileMenuOpen,
+    setIsMobileMenuOpen
+  } = useModals();
 
   return (
-    <aside className="w-64 h-screen fixed left-0 top-0 bg-white border-r border-outline-variant flex flex-col z-50">
-      <div className="px-6 py-8">
-        <h1 className="text-xl font-bold text-primary tracking-tight leading-tight">Compliance Portal</h1>
-        <p className="text-[11px] font-bold text-secondary uppercase tracking-[0.05em] mt-1 opacity-80">Tax & Audit Division</p>
+    <aside 
+      className={cn(
+        "h-screen fixed left-0 top-0 bg-white border-r border-outline-variant flex flex-col z-50 transition-all duration-300 ease-in-out",
+        // Width on Desktop
+        isSidebarCollapsed ? "lg:w-20" : "lg:w-64",
+        // Width & behavior on Mobile (slide-in menu with screen overlay)
+        isMobileMenuOpen ? "translate-x-0 w-64" : "-translate-x-full lg:translate-x-0",
+        "w-64" // default
+      )}
+    >
+      {/* Sidebar Header */}
+      <div className={cn(
+        "py-6 border-b border-outline-variant flex items-center justify-between",
+        isSidebarCollapsed ? "px-4 justify-center lg:px-2" : "px-6"
+      )}>
+        {/* Brand Logo & Initials */}
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="p-1.5 bg-primary/5 rounded text-primary shrink-0">
+            <ShieldCheck size={28} className="text-secondary stroke-[2]" />
+          </div>
+          
+          {(!isSidebarCollapsed || isMobileMenuOpen) && (
+            <div className="transition-opacity duration-300 whitespace-nowrap">
+              <h1 className="text-sm font-black text-primary tracking-tight leading-none">Compliance Portal</h1>
+              <p className="text-[9px] font-black text-secondary uppercase tracking-[0.05em] mt-0.5 opacity-80">Tax & Audit</p>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile close button / Desktop collapse toggle button */}
+        <div className="flex items-center gap-1">
+          {/* Mobile close button */}
+          <button 
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="lg:hidden p-1.5 hover:bg-surface-container rounded-sm text-secondary transition-colors"
+          >
+            <X size={18} />
+          </button>
+
+          {/* Desktop Collapse Toggle */}
+          <button
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="hidden lg:flex p-1.5 hover:bg-surface-container rounded-sm text-secondary transition-colors"
+            title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
+          >
+            {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
+        </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-2">
-        {menuItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "sidebar-item",
-                isActive && "sidebar-item-active"
-              )}
-            >
-              <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-              <span className={cn(isActive && "font-bold")}>{item.label}</span>
-            </Link>
-          );
-        })}
+      {/* Navigation list */}
+      <nav className="flex-1 overflow-y-auto py-4 space-y-1">
+        {(() => {
+          const displayMenuItems = [...menuItems];
+          if (user?.perfil === "superAdmin") {
+            displayMenuItems.push({
+              icon: Database,
+              label: "Consultas Especiais",
+              href: "/consultas"
+            });
+          }
+          return displayMenuItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={cn(
+                  "sidebar-item flex items-center transition-all duration-200",
+                  isSidebarCollapsed ? "lg:px-0 lg:justify-center lg:gap-0" : "px-6 gap-3",
+                  isActive && "sidebar-item-active"
+                )}
+                title={isSidebarCollapsed ? item.label : undefined}
+              >
+                <item.icon size={20} className="shrink-0" strokeWidth={isActive ? 2.5 : 2} />
+                
+                {(!isSidebarCollapsed || isMobileMenuOpen) && (
+                  <span className={cn(isActive && "font-bold", "text-sm truncate transition-opacity duration-300")}>
+                    {item.label}
+                  </span>
+                )}
+              </Link>
+            );
+          });
+        })()}
 
-        <div className="mt-8 px-6 space-y-3">
-          <p className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] mb-4">Operações Rápidas</p>
-          
+        {/* Quick Actions (Operações Rápidas) */}
+        <div className={cn(
+          "mt-6 space-y-3",
+          isSidebarCollapsed ? "lg:px-2" : "px-6"
+        )}>
+          {(!isSidebarCollapsed || isMobileMenuOpen) && (
+            <p className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] mb-4">
+              Operações Rápidas
+            </p>
+          )}
+
+          {/* Nova Empresa */}
           <button 
-            onClick={() => openRegisterEmpresaModal()}
-            className="w-full flex items-center gap-3 px-4 py-3 bg-primary text-white rounded-sm text-xs font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-all active:scale-[0.98]"
+            onClick={() => {
+              openRegisterEmpresaModal();
+              setIsMobileMenuOpen(false);
+            }}
+            className={cn(
+              "flex items-center bg-primary text-white font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-all active:scale-[0.98]",
+              isSidebarCollapsed ? "lg:w-12 lg:h-12 lg:justify-center lg:p-0 rounded-full mx-auto" : "w-full gap-3 px-4 py-3 rounded-sm text-xs"
+            )}
+            title="Novo Empregador"
           >
-            <Plus size={16} />
-            <span>Novo Empregador</span>
+            <Plus size={18} className="shrink-0" />
+            {(!isSidebarCollapsed || isMobileMenuOpen) && <span>Novo Empregador</span>}
           </button>
- 
+
+          {/* Novo Trabalhador */}
           <button 
-            onClick={() => openRegisterTrabalhadorModal()}
-            className="w-full flex items-center gap-3 px-4 py-3 border border-primary text-primary rounded-sm text-xs font-bold hover:bg-primary/5 transition-all active:scale-[0.98]"
+            onClick={() => {
+              openRegisterTrabalhadorModal();
+              setIsMobileMenuOpen(false);
+            }}
+            className={cn(
+              "flex items-center border border-primary text-primary font-bold hover:bg-primary/5 transition-all active:scale-[0.98]",
+              isSidebarCollapsed ? "lg:w-12 lg:h-12 lg:justify-center lg:p-0 rounded-full mx-auto" : "w-full gap-3 px-4 py-3 rounded-sm text-xs"
+            )}
+            title="Novo Trabalhador"
           >
-            <UserPlus size={16} />
-            <span>Novo Trabalhador</span>
+            <UserPlus size={18} className="shrink-0" />
+            {(!isSidebarCollapsed || isMobileMenuOpen) && <span>Novo Trabalhador</span>}
           </button>
- 
+
+          {/* Novo Plano de Saúde */}
           <button 
-            onClick={() => openRegisterOperadoraModal()}
-            className="w-full flex items-center gap-3 px-4 py-3 border border-secondary/30 text-secondary rounded-sm text-xs font-bold hover:bg-surface transition-all active:scale-[0.98]"
+            onClick={() => {
+              openRegisterOperadoraModal();
+              setIsMobileMenuOpen(false);
+            }}
+            className={cn(
+              "flex items-center border border-secondary/30 text-secondary font-bold hover:bg-surface transition-all active:scale-[0.98]",
+              isSidebarCollapsed ? "lg:w-12 lg:h-12 lg:justify-center lg:p-0 rounded-full mx-auto" : "w-full gap-3 px-4 py-3 rounded-sm text-xs"
+            )}
+            title="Plano de Saúde"
           >
-            <ShieldPlus size={16} />
-            <span>Plano de Saúde</span>
+            <ShieldPlus size={18} className="shrink-0" />
+            {(!isSidebarCollapsed || isMobileMenuOpen) && <span>Plano de Saúde</span>}
           </button>
         </div>
       </nav>
 
-      <div className="mt-auto px-2 pb-6 border-t border-outline-variant pt-4 bg-white">
-        <div className="flex flex-col gap-1 mb-6">
+      {/* Sidebar Footer */}
+      <div className={cn(
+        "mt-auto border-t border-outline-variant bg-white",
+        isSidebarCollapsed ? "lg:py-4" : "py-4"
+      )}>
+        {/* Footer menu items */}
+        <div className="flex flex-col gap-0.5 mb-4">
           {footerItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="sidebar-item"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={cn(
+                "sidebar-item flex items-center transition-all duration-200",
+                isSidebarCollapsed ? "lg:px-0 lg:justify-center lg:gap-0" : "px-6 gap-3"
+              )}
+              title={isSidebarCollapsed ? item.label : undefined}
             >
-              <item.icon size={20} />
-              <span>{item.label}</span>
+              <item.icon size={20} className="shrink-0" />
+              {(!isSidebarCollapsed || isMobileMenuOpen) && (
+                <span className="text-sm truncate">{item.label}</span>
+              )}
             </Link>
           ))}
         </div>
 
-        <div className="px-4 pt-6 border-t border-outline-variant">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center text-on-primary font-bold text-xs shadow-sm shadow-primary/20">
-              JD
+        {/* User profile info */}
+        <div className={cn(
+          "border-t border-outline-variant",
+          isSidebarCollapsed ? "lg:pt-4 lg:px-2" : "pt-4 px-4"
+        )}>
+          <div className="flex flex-col gap-3">
+            <div className={cn(
+              "flex items-center gap-3",
+              isSidebarCollapsed && "lg:justify-center"
+            )}>
+              <div className="w-9 h-9 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-xs shadow-sm shrink-0">
+                {user?.nome ? user.nome.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "US"}
+              </div>
+              {(!isSidebarCollapsed || isMobileMenuOpen) && (
+                <div className="truncate flex-1 min-w-0">
+                  <p className="text-[11px] font-bold text-on-surface leading-tight truncate">{user?.nome || "Usuário"}</p>
+                  <p className="text-[10px] text-secondary font-semibold leading-none mt-1 uppercase tracking-wider">{user?.perfil || "user"}</p>
+                </div>
+              )}
             </div>
-            <div>
-              <p className="text-[11px] font-bold text-on-surface leading-tight">Analista Fiscal</p>
-              <p className="text-[10px] text-secondary font-medium">ID: 4829-X</p>
-            </div>
+
+            {/* Logout button */}
+            {(!isSidebarCollapsed || isMobileMenuOpen) ? (
+              <button
+                onClick={logout}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-650 hover:text-red-750 hover:bg-red-50/50 border border-red-100 rounded-sm transition-all text-red-600 font-medium"
+              >
+                <LogOut size={14} />
+                EFETUAR LOGOUT
+              </button>
+            ) : (
+              <button
+                onClick={logout}
+                className="w-9 h-9 mx-auto flex items-center justify-center text-red-600 hover:bg-red-50 rounded-full transition-all border border-transparent hover:border-red-100"
+                title="Sair do Sistema"
+              >
+                <LogOut size={16} />
+              </button>
+            )}
           </div>
         </div>
       </div>

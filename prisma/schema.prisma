@@ -56,28 +56,34 @@ enum TipoOperadora {
 //////////////////////////////////////////////////////
 
 model Empresa {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  cnpjRaiz              String                    @unique @map("cnpj_raiz")
-  cnpjCompleto          String?                   @map("cnpj_completo")
+  cnpjRaiz     String  @unique @map("cnpj_raiz")
+  cnpjCompleto String? @map("cnpj_completo")
 
-  razaoSocial           String?                   @map("razao_social")
-  nomeFantasia          String?                   @map("nome_fantasia")
+  razaoSocial  String? @map("razao_social")
+  nomeFantasia String? @map("nome_fantasia")
 
-  ambienteEsocial       EsocialAmbiente           @default(producao) @map("ambiente_esocial")
+  ambienteEsocial EsocialAmbiente @default(producao) @map("ambiente_esocial")
 
-  ultimaSincronizacao   DateTime?                 @map("ultima_sincronizacao")
+  ultimaSincronizacao DateTime? @map("ultima_sincronizacao")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  trabalhadores         Trabalhador[]
-  lotes                 EsocialLote[]
-  eventos               EsocialEvento[]
-  s5002Eventos          S5002Evento[]
-  consolidacoes         S5002ConsolidadoPeriodo[]
-  consolidacoesAnuais   S5002ConsolidadoAnual[]
-  certificados          CertificadoDigital[]
+  trabalhadores       Trabalhador[]
+  lotes               EsocialLote[]
+  eventos             EsocialEvento[]
+  s5002Eventos        S5002Evento[]
+  consolidacoes       S5002ConsolidadoPeriodo[]
+  consolidacoesAnuais S5002ConsolidadoAnual[]
+  certificados        CertificadoDigital[]
+
+  prestadores       PrestadorServico[]
+  reinfLotes        ReinfLote[]
+  reinfEventos      ReinfEvento[]
+  reinfR2099        ReinfR2099[]
+  reinfR4020Eventos ReinfR4020Evento[]
 
   @@map("empresa")
 }
@@ -87,40 +93,38 @@ model Empresa {
 //////////////////////////////////////////////////////
 
 model Trabalhador {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  empresaId             String                    @map("empresa_id")
-  empresa               Empresa                   @relation(fields: [empresaId], references: [id])
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
 
-  cpf                   String
-  nis                   String?
-  matricula             String?
+  cpf       String
+  nis       String?
+  matricula String?
 
-  nome                  String?
+  nome String?
 
-  categoriaEsocial      String?                   @map("categoria_esocial")
+  categoriaEsocial String? @map("categoria_esocial")
 
-  ativo                 Boolean                   @default(true)
+  ativo Boolean @default(true)
 
-  dtAdmissao            DateTime?                 @map("dt_admissao")
-  dtDesligamento        DateTime?                 @map("dt_desligamento")
+  dtAdmissao     DateTime? @map("dt_admissao")
+  dtDesligamento DateTime? @map("dt_desligamento")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  eventos               EsocialEvento[]
-  s5002Eventos          S5002Evento[]
+  eventos      EsocialEvento[]
+  s5002Eventos S5002Evento[]
 
-  dependentesMaster     DependenteMaster[]
+  dependentesMaster DependenteMaster[]
 
-  consolidacoes         S5002ConsolidadoPeriodo[]
-  consolidacoesAnuais   S5002ConsolidadoAnual[]
+  consolidacoes       S5002ConsolidadoPeriodo[]
+  consolidacoesAnuais S5002ConsolidadoAnual[]
 
   @@unique([empresaId, cpf])
-
   @@index([empresaId])
   @@index([cpf])
-
   @@map("trabalhador")
 }
 
@@ -129,40 +133,40 @@ model Trabalhador {
 //////////////////////////////////////////////////////
 
 model EsocialXmlStorage {
-  id           String   @id @default(cuid())
-  hashArquivo  String   @unique @map("hash_arquivo")
-  storagePath  String   @map("storage_path")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id          String   @id @default(cuid())
+  hashArquivo String   @unique @map("hash_arquivo")
+  storagePath String   @map("storage_path")
+  createdAt   DateTime @default(now()) @map("created_at")
 
-  lotes        EsocialLote[]
+  lotes EsocialLote[]
 
   @@map("esocial_xml_storage")
 }
 
 model EsocialLote {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  empresaId             String?                   @map("empresa_id")
-  empresa               Empresa?                  @relation(fields: [empresaId], references: [id])
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
-  storageId             String?                   @map("storage_id")
-  storage               EsocialXmlStorage?        @relation(fields: [storageId], references: [id])
+  storageId String?            @map("storage_id")
+  storage   EsocialXmlStorage? @relation(fields: [storageId], references: [id])
 
-  hashArquivo           String                    @map("hash_arquivo")
+  hashArquivo String @map("hash_arquivo")
 
-  nomeArquivo           String?                   @map("nome_arquivo")
+  nomeArquivo String? @map("nome_arquivo")
 
-  storagePath           String                    @map("storage_path")
+  storagePath String @map("storage_path")
 
-  totalEventos          Int                       @default(0) @map("total_eventos")
+  totalEventos Int @default(0) @map("total_eventos")
 
-  status                StatusProcessamento       @default(pendente)
+  status StatusProcessamento @default(pendente)
 
-  processadoEm          DateTime?                 @map("processado_em")
+  processadoEm DateTime? @map("processado_em")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  eventos               EsocialEvento[]
+  eventos EsocialEvento[]
 
   @@index([hashArquivo])
   @@map("esocial_lote")
@@ -173,66 +177,63 @@ model EsocialLote {
 //////////////////////////////////////////////////////
 
 model EsocialEvento {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  loteId                String?                   @map("lote_id")
-  lote                  EsocialLote?              @relation(fields: [loteId], references: [id])
+  loteId String?      @map("lote_id")
+  lote   EsocialLote? @relation(fields: [loteId], references: [id])
 
-  empresaId             String?                   @map("empresa_id")
-  empresa               Empresa?                  @relation(fields: [empresaId], references: [id])
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
-  trabalhadorId         String?                   @map("trabalhador_id")
-  trabalhador           Trabalhador?              @relation(fields: [trabalhadorId], references: [id])
+  trabalhadorId String?      @map("trabalhador_id")
+  trabalhador   Trabalhador? @relation(fields: [trabalhadorId], references: [id])
 
-  eventoId              String                    @unique @map("evento_id")
+  eventoId String @unique @map("evento_id")
 
-  tpEvento              String                    @map("tp_evento")
+  tpEvento String @map("tp_evento")
 
-  perApur               String                    @map("per_apur")
+  perApur String @map("per_apur")
 
-  cnpjRaiz              String?                   @map("cnpj_raiz")
-  cpfBenef              String?                   @map("cpf_benef")
+  cnpjRaiz String? @map("cnpj_raiz")
+  cpfBenef String? @map("cpf_benef")
 
-  indRetif              Int?                      @map("ind_retif")
+  indRetif Int? @map("ind_retif")
 
-  nrRecibo              String?                   @map("nr_recibo")
+  nrRecibo String? @map("nr_recibo")
 
-  nrReciboOrig          String?                   @map("nr_recibo_orig")
+  nrReciboOrig String? @map("nr_recibo_orig")
 
-  xmlHash               String                    @map("xml_hash")
+  xmlHash String @map("xml_hash")
 
-  xmlPath               String?                   @map("xml_path")
+  xmlPath String? @map("xml_path")
 
-  ativo                 Boolean                   @default(true)
+  ativo Boolean @default(true)
 
-  substituidoPorId      String?                   @map("substituido_por_id")
-  substituidoPor        EsocialEvento?            @relation("EventoSubstituicao", fields: [substituidoPorId], references: [id])
+  substituidoPorId String?        @map("substituido_por_id")
+  substituidoPor   EsocialEvento? @relation("EventoSubstituicao", fields: [substituidoPorId], references: [id])
 
-  eventosSubstituidos   EsocialEvento[]           @relation("EventoSubstituicao")
+  eventosSubstituidos EsocialEvento[] @relation("EventoSubstituicao")
 
-  status                StatusProcessamento       @default(pendente)
+  status StatusProcessamento @default(pendente)
 
-  processadoEm          DateTime?                 @map("processado_em")
+  processadoEm DateTime? @map("processado_em")
 
-  invalidadoEm          DateTime?                 @map("invalidado_em")
+  invalidadoEm DateTime? @map("invalidado_em")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  s5002                 S5002Evento?
+  s5002 S5002Evento?
 
-  historicos            EsocialEventoHistorico[]
-  consolidacoesOrigem   S5002ConsolidadoPeriodo[]
-  divergencias          DivergenciaFiscal[]
+  historicos          EsocialEventoHistorico[]
+  consolidacoesOrigem S5002ConsolidadoPeriodo[]
+  divergencias        DivergenciaFiscal[]
 
   @@index([empresaId, perApur])
   @@index([trabalhadorId, perApur])
-
   @@index([nrRecibo])
   @@index([nrReciboOrig])
-
   @@index([ativo])
-
   @@map("esocial_evento")
 }
 
@@ -241,24 +242,23 @@ model EsocialEvento {
 //////////////////////////////////////////////////////
 
 model EsocialEventoHistorico {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  eventoId              String                    @map("evento_id")
-  evento                EsocialEvento             @relation(fields: [eventoId], references: [id])
+  eventoId String        @map("evento_id")
+  evento   EsocialEvento @relation(fields: [eventoId], references: [id])
 
-  acao                  TipoAcaoHistorico
+  acao TipoAcaoHistorico
 
-  descricao             String?
+  descricao String?
 
-  payloadAntes          Json?                     @map("payload_antes")
-  payloadDepois         Json?                     @map("payload_depois")
+  payloadAntes  Json? @map("payload_antes")
+  payloadDepois Json? @map("payload_depois")
 
-  usuario               String?
+  usuario String?
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([eventoId])
-
   @@map("esocial_evento_historico")
 }
 
@@ -267,27 +267,26 @@ model EsocialEventoHistorico {
 //////////////////////////////////////////////////////
 
 model S5002Evento {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  eventoId              String                    @unique @map("evento_id")
-  evento                EsocialEvento             @relation(fields: [eventoId], references: [id])
+  eventoId String        @unique @map("evento_id")
+  evento   EsocialEvento @relation(fields: [eventoId], references: [id])
 
-  empresaId             String?                   @map("empresa_id")
-  empresa               Empresa?                  @relation(fields: [empresaId], references: [id])
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
-  trabalhadorId         String?                   @map("trabalhador_id")
-  trabalhador           Trabalhador?              @relation(fields: [trabalhadorId], references: [id])
+  trabalhadorId String?      @map("trabalhador_id")
+  trabalhador   Trabalhador? @relation(fields: [trabalhadorId], references: [id])
 
-  perApur               String                    @map("per_apur")
+  perApur String @map("per_apur")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  demonstrativos        S5002DmDev[]
-  periodosAnteriores    S5002PeriodoAnterior[]
+  demonstrativos     S5002DmDev[]
+  periodosAnteriores S5002PeriodoAnterior[]
 
   @@index([empresaId, perApur])
   @@index([trabalhadorId, perApur])
-
   @@map("s5002_evento")
 }
 
@@ -296,30 +295,28 @@ model S5002Evento {
 //////////////////////////////////////////////////////
 
 model S5002DmDev {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  s5002EventoId         String                    @map("s5002_evento_id")
-  s5002Evento           S5002Evento               @relation(fields: [s5002EventoId], references: [id])
+  s5002EventoId String      @map("s5002_evento_id")
+  s5002Evento   S5002Evento @relation(fields: [s5002EventoId], references: [id])
 
-  ideDmDev              String                    @map("ide_dmdev")
+  ideDmDev String @map("ide_dmdev")
 
-  perRef                String                    @map("per_ref")
+  perRef String @map("per_ref")
 
-  dtPgto                DateTime?                 @map("dt_pgto")
+  dtPgto DateTime? @map("dt_pgto")
 
-  tpPgto                Int?                      @map("tp_pgto")
+  tpPgto Int? @map("tp_pgto")
 
-  codCateg              String?                   @map("cod_categ")
+  codCateg String? @map("cod_categ")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  infoIR                S5002InfoIR[]
-  totais                S5002TotApurMen[]
+  infoIR S5002InfoIR[]
+  totais S5002TotApurMen[]
 
   @@unique([s5002EventoId, ideDmDev, perRef])
-
   @@index([perRef])
-
   @@map("s5002_dmdev")
 }
 
@@ -328,19 +325,18 @@ model S5002DmDev {
 //////////////////////////////////////////////////////
 
 model S5002InfoIR {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  dmDevId               String                    @map("dmdev_id")
-  dmDev                 S5002DmDev               @relation(fields: [dmDevId], references: [id])
+  dmDevId String     @map("dmdev_id")
+  dmDev   S5002DmDev @relation(fields: [dmDevId], references: [id])
 
-  tpInfoIR              String                    @map("tp_info_ir")
+  tpInfoIR String @map("tp_info_ir")
 
-  valor                 Decimal                   @db.Decimal(14,2)
+  valor Decimal @db.Decimal(14, 2)
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([tpInfoIR])
-
   @@map("s5002_info_ir")
 }
 
@@ -349,26 +345,26 @@ model S5002InfoIR {
 //////////////////////////////////////////////////////
 
 model S5002TotApurMen {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  dmDevId               String                    @map("dmdev_id")
-  dmDev                 S5002DmDev               @relation(fields: [dmDevId], references: [id])
+  dmDevId String     @map("dmdev_id")
+  dmDev   S5002DmDev @relation(fields: [dmDevId], references: [id])
 
-  crMen                 String?                   @map("cr_men")
+  crMen String? @map("cr_men")
 
-  vlrRendTrib           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib")
+  vlrRendTrib Decimal @default(0) @map("vlr_rend_trib") @db.Decimal(14, 2)
 
-  vlrRendTrib13         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib_13")
+  vlrRendTrib13 Decimal @default(0) @map("vlr_rend_trib_13") @db.Decimal(14, 2)
 
-  vlrPrevOficial        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial")
+  vlrPrevOficial Decimal @default(0) @map("vlr_prev_oficial") @db.Decimal(14, 2)
 
-  vlrPrevOficial13      Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial_13")
+  vlrPrevOficial13 Decimal @default(0) @map("vlr_prev_oficial_13") @db.Decimal(14, 2)
 
-  vlrCRMen              Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_crmen")
+  vlrCRMen Decimal @default(0) @map("vlr_crmen") @db.Decimal(14, 2)
 
-  vlrCR13Men            Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_cr13men")
+  vlrCR13Men Decimal @default(0) @map("vlr_cr13men") @db.Decimal(14, 2)
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("s5002_tot_apur_men")
 }
@@ -378,23 +374,22 @@ model S5002TotApurMen {
 //////////////////////////////////////////////////////
 
 model S5002PeriodoAnterior {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  s5002EventoId         String                    @map("s5002_evento_id")
-  s5002Evento           S5002Evento               @relation(fields: [s5002EventoId], references: [id])
+  s5002EventoId String      @map("s5002_evento_id")
+  s5002Evento   S5002Evento @relation(fields: [s5002EventoId], references: [id])
 
-  perRefAjuste          String                    @map("per_ref_ajuste")
+  perRefAjuste String @map("per_ref_ajuste")
 
-  nrRec1210Orig         String?                   @map("nr_rec_1210_orig")
+  nrRec1210Orig String? @map("nr_rec_1210_orig")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  dependentes           S5002PeriodoDependente[]
-  infoCR                S5002PeriodoInfoCR[]
-  planosSaude           S5002PeriodoPlanoSaude[]
+  dependentes S5002PeriodoDependente[]
+  infoCR      S5002PeriodoInfoCR[]
+  planosSaude S5002PeriodoPlanoSaude[]
 
   @@index([perRefAjuste])
-
   @@map("s5002_periodo_anterior")
 }
 
@@ -403,21 +398,21 @@ model S5002PeriodoAnterior {
 //////////////////////////////////////////////////////
 
 model S5002PeriodoDependente {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  periodoAnteriorId     String                    @map("periodo_anterior_id")
-  periodoAnterior       S5002PeriodoAnterior      @relation(fields: [periodoAnteriorId], references: [id])
+  periodoAnteriorId String               @map("periodo_anterior_id")
+  periodoAnterior   S5002PeriodoAnterior @relation(fields: [periodoAnteriorId], references: [id])
 
-  dependenteId          String?                   @map("dependente_id")
-  dependente            DependenteMaster?         @relation(fields: [dependenteId], references: [id])
+  dependenteId String?           @map("dependente_id")
+  dependente   DependenteMaster? @relation(fields: [dependenteId], references: [id])
 
-  cpfDep                String?                   @map("cpf_dep")
+  cpfDep String? @map("cpf_dep")
 
-  depIRRF               Boolean                   @default(false) @map("dep_irrf")
+  depIRRF Boolean @default(false) @map("dep_irrf")
 
-  tpDep                 String?                   @map("tp_dep")
+  tpDep String? @map("tp_dep")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("s5002_periodo_dependente")
 }
@@ -427,17 +422,17 @@ model S5002PeriodoDependente {
 //////////////////////////////////////////////////////
 
 model S5002PeriodoInfoCR {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  periodoAnteriorId     String                    @map("periodo_anterior_id")
-  periodoAnterior       S5002PeriodoAnterior      @relation(fields: [periodoAnteriorId], references: [id])
+  periodoAnteriorId String               @map("periodo_anterior_id")
+  periodoAnterior   S5002PeriodoAnterior @relation(fields: [periodoAnteriorId], references: [id])
 
-  tpCR                  String                    @map("tp_cr")
+  tpCR String @map("tp_cr")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  deducoesDependente    S5002PeriodoDedDep[]
-  pensoes               S5002PeriodoPensao[]
+  deducoesDependente S5002PeriodoDedDep[]
+  pensoes            S5002PeriodoPensao[]
 
   @@map("s5002_periodo_info_cr")
 }
@@ -447,21 +442,21 @@ model S5002PeriodoInfoCR {
 //////////////////////////////////////////////////////
 
 model S5002PeriodoDedDep {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  infoCRId              String                    @map("info_cr_id")
-  infoCR                S5002PeriodoInfoCR        @relation(fields: [infoCRId], references: [id])
+  infoCRId String             @map("info_cr_id")
+  infoCR   S5002PeriodoInfoCR @relation(fields: [infoCRId], references: [id])
 
-  dependenteId          String?                   @map("dependente_id")
-  dependente            DependenteMaster?         @relation(fields: [dependenteId], references: [id])
+  dependenteId String?           @map("dependente_id")
+  dependente   DependenteMaster? @relation(fields: [dependenteId], references: [id])
 
-  cpfDep                String?                   @map("cpf_dep")
+  cpfDep String? @map("cpf_dep")
 
-  tpRend                String                    @map("tp_rend")
+  tpRend String @map("tp_rend")
 
-  vlrDedDep             Decimal                   @db.Decimal(14,2) @map("vlr_ded_dep")
+  vlrDedDep Decimal @map("vlr_ded_dep") @db.Decimal(14, 2)
 
-  excluidoRetificacao   Boolean                   @default(false) @map("excluido_retificacao")
+  excluidoRetificacao Boolean @default(false) @map("excluido_retificacao")
 
   @@map("s5002_periodo_ded_dep")
 }
@@ -471,19 +466,19 @@ model S5002PeriodoDedDep {
 //////////////////////////////////////////////////////
 
 model S5002PeriodoPensao {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  infoCRId              String                    @map("info_cr_id")
-  infoCR                S5002PeriodoInfoCR        @relation(fields: [infoCRId], references: [id])
+  infoCRId String             @map("info_cr_id")
+  infoCR   S5002PeriodoInfoCR @relation(fields: [infoCRId], references: [id])
 
-  dependenteId          String?                   @map("dependente_id")
-  dependente            DependenteMaster?         @relation(fields: [dependenteId], references: [id])
+  dependenteId String?           @map("dependente_id")
+  dependente   DependenteMaster? @relation(fields: [dependenteId], references: [id])
 
-  cpfDep                String?                   @map("cpf_dep")
+  cpfDep String? @map("cpf_dep")
 
-  tpRend                String                    @map("tp_rend")
+  tpRend String @map("tp_rend")
 
-  vlrDedPenAlim         Decimal                   @db.Decimal(14,2) @map("vlr_ded_pen_alim")
+  vlrDedPenAlim Decimal @map("vlr_ded_pen_alim") @db.Decimal(14, 2)
 
   @@map("s5002_periodo_pensao")
 }
@@ -493,23 +488,23 @@ model S5002PeriodoPensao {
 //////////////////////////////////////////////////////
 
 model S5002PeriodoPlanoSaude {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  periodoAnteriorId     String                    @map("periodo_anterior_id")
-  periodoAnterior       S5002PeriodoAnterior      @relation(fields: [periodoAnteriorId], references: [id])
+  periodoAnteriorId String               @map("periodo_anterior_id")
+  periodoAnterior   S5002PeriodoAnterior @relation(fields: [periodoAnteriorId], references: [id])
 
-  operadoraId           String?                   @map("operadora_id")
-  operadora             OperadoraSaude?           @relation(fields: [operadoraId], references: [id])
+  operadoraId String?         @map("operadora_id")
+  operadora   OperadoraSaude? @relation(fields: [operadoraId], references: [id])
 
-  cnpjOper              String                    @map("cnpj_oper")
+  cnpjOper String @map("cnpj_oper")
 
-  regANS                String?                   @map("reg_ans")
+  regANS String? @map("reg_ans")
 
-  vlrSaudeTit           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_saude_tit")
+  vlrSaudeTit Decimal @default(0) @map("vlr_saude_tit") @db.Decimal(14, 2)
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  dependentes           S5002PeriodoPlanoSaudeDep[]
+  dependentes S5002PeriodoPlanoSaudeDep[]
 
   @@map("s5002_periodo_plano_saude")
 }
@@ -519,17 +514,17 @@ model S5002PeriodoPlanoSaude {
 //////////////////////////////////////////////////////
 
 model S5002PeriodoPlanoSaudeDep {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  planoSaudeId          String                    @map("plano_saude_id")
-  planoSaude            S5002PeriodoPlanoSaude    @relation(fields: [planoSaudeId], references: [id])
+  planoSaudeId String                 @map("plano_saude_id")
+  planoSaude   S5002PeriodoPlanoSaude @relation(fields: [planoSaudeId], references: [id])
 
-  dependenteId          String?                   @map("dependente_id")
-  dependente            DependenteMaster?         @relation(fields: [dependenteId], references: [id])
+  dependenteId String?           @map("dependente_id")
+  dependente   DependenteMaster? @relation(fields: [dependenteId], references: [id])
 
-  cpfDep                String?                   @map("cpf_dep")
+  cpfDep String? @map("cpf_dep")
 
-  vlrSaudeDep           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_saude_dep")
+  vlrSaudeDep Decimal @default(0) @map("vlr_saude_dep") @db.Decimal(14, 2)
 
   @@map("s5002_periodo_plano_saude_dep")
 }
@@ -539,53 +534,51 @@ model S5002PeriodoPlanoSaudeDep {
 //////////////////////////////////////////////////////
 
 model S5002ConsolidadoPeriodo {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  empresaId             String                    @map("empresa_id")
-  empresa               Empresa                   @relation(fields: [empresaId], references: [id])
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
 
-  trabalhadorId         String?                   @map("trabalhador_id")
-  trabalhador           Trabalhador?              @relation(fields: [trabalhadorId], references: [id])
+  trabalhadorId String?      @map("trabalhador_id")
+  trabalhador   Trabalhador? @relation(fields: [trabalhadorId], references: [id])
 
-  periodo               String                    @map("periodo")
+  periodo String @map("periodo")
 
-  eventoOrigemId        String                    @map("evento_origem_id")
-  eventoOrigem          EsocialEvento             @relation(fields: [eventoOrigemId], references: [id])
+  eventoOrigemId String        @map("evento_origem_id")
+  eventoOrigem   EsocialEvento @relation(fields: [eventoOrigemId], references: [id])
 
-  versao                Int                       @default(1)
+  versao Int @default(1)
 
-  ativo                 Boolean                   @default(true)
+  ativo Boolean @default(true)
 
-  hashConsolidacao      String                    @map("hash_consolidacao")
+  hashConsolidacao String @map("hash_consolidacao")
 
-  tipoPeriodo           TipoPeriodo               @default(mensal) @map("tipo_periodo")
+  tipoPeriodo TipoPeriodo @default(mensal) @map("tipo_periodo")
 
-  vlrRendTrib           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib")
+  vlrRendTrib Decimal @default(0) @map("vlr_rend_trib") @db.Decimal(14, 2)
 
-  vlrRendTrib13         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib_13")
+  vlrRendTrib13 Decimal @default(0) @map("vlr_rend_trib_13") @db.Decimal(14, 2)
 
-  vlrPrevOficial        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial")
+  vlrPrevOficial Decimal @default(0) @map("vlr_prev_oficial") @db.Decimal(14, 2)
 
-  vlrPrevOficial13      Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial_13")
+  vlrPrevOficial13 Decimal @default(0) @map("vlr_prev_oficial_13") @db.Decimal(14, 2)
 
-  vlrPensao             Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_pensao")
+  vlrPensao Decimal @default(0) @map("vlr_pensao") @db.Decimal(14, 2)
 
-  vlrPlanoSaude         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_plano_saude")
+  vlrPlanoSaude Decimal @default(0) @map("vlr_plano_saude") @db.Decimal(14, 2)
 
-  vlrDependentes        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_dependentes")
+  vlrDependentes Decimal @default(0) @map("vlr_dependentes") @db.Decimal(14, 2)
 
-  vlrIrrf               Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_irrf")
+  vlrIrrf Decimal @default(0) @map("vlr_irrf") @db.Decimal(14, 2)
 
-  origemRetificacao     Boolean                   @default(false) @map("origem_retificacao")
+  origemRetificacao Boolean @default(false) @map("origem_retificacao")
 
-  processadoEm          DateTime                  @default(now()) @map("processado_em")
+  processadoEm DateTime @default(now()) @map("processado_em")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([trabalhadorId, periodo, versao])
-
   @@index([trabalhadorId, periodo, ativo])
-
   @@map("s5002_consolidado_periodo")
 }
 
@@ -594,37 +587,36 @@ model S5002ConsolidadoPeriodo {
 //////////////////////////////////////////////////////
 
 model S5002ConsolidadoAnual {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  empresaId             String                    @map("empresa_id")
-  empresa               Empresa                   @relation(fields: [empresaId], references: [id])
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
 
-  trabalhadorId         String?                   @map("trabalhador_id")
-  trabalhador           Trabalhador?              @relation(fields: [trabalhadorId], references: [id])
+  trabalhadorId String?      @map("trabalhador_id")
+  trabalhador   Trabalhador? @relation(fields: [trabalhadorId], references: [id])
 
-  ano                   Int
+  ano Int
 
-  vlrRendTrib           Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib")
+  vlrRendTrib Decimal @default(0) @map("vlr_rend_trib") @db.Decimal(14, 2)
 
-  vlrRendTrib13         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_rend_trib_13")
+  vlrRendTrib13 Decimal @default(0) @map("vlr_rend_trib_13") @db.Decimal(14, 2)
 
-  vlrPrevOficial        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_prev_oficial")
+  vlrPrevOficial Decimal @default(0) @map("vlr_prev_oficial") @db.Decimal(14, 2)
 
-  vlrPensao             Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_pensao")
+  vlrPensao Decimal @default(0) @map("vlr_pensao") @db.Decimal(14, 2)
 
-  vlrPlanoSaude         Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_plano_saude")
+  vlrPlanoSaude Decimal @default(0) @map("vlr_plano_saude") @db.Decimal(14, 2)
 
-  vlrDependentes        Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_dependentes")
+  vlrDependentes Decimal @default(0) @map("vlr_dependentes") @db.Decimal(14, 2)
 
-  vlrIrrf               Decimal                   @default(0) @db.Decimal(14,2) @map("vlr_irrf")
+  vlrIrrf Decimal @default(0) @map("vlr_irrf") @db.Decimal(14, 2)
 
-  ultimaReprocessamento DateTime?                 @map("ultima_reprocessamento")
+  ultimaReprocessamento DateTime? @map("ultima_reprocessamento")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([trabalhadorId, ano])
-
   @@map("s5002_consolidado_anual")
 }
 
@@ -633,35 +625,33 @@ model S5002ConsolidadoAnual {
 //////////////////////////////////////////////////////
 
 model DependenteMaster {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  trabalhadorId         String                    @map("trabalhador_id")
-  trabalhador           Trabalhador               @relation(fields: [trabalhadorId], references: [id])
+  trabalhadorId String      @map("trabalhador_id")
+  trabalhador   Trabalhador @relation(fields: [trabalhadorId], references: [id])
 
-  cpf                   String
+  cpf String
 
-  nome                  String
+  nome String
 
-  tpDependente          String?                   @map("tp_dependente")
+  tpDependente String? @map("tp_dependente")
 
-  deduzIrrf             Boolean                   @default(false) @map("deduz_irrf")
+  deduzIrrf Boolean @default(false) @map("deduz_irrf")
 
-  dtNascimento          DateTime?                 @map("dt_nascimento")
+  dtNascimento DateTime? @map("dt_nascimento")
 
-  ativo                 Boolean                   @default(true)
+  ativo Boolean @default(true)
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  periodoDependentes    S5002PeriodoDependente[]
-  deducoesDependente    S5002PeriodoDedDep[]
-  pensoes               S5002PeriodoPensao[]
-  planosSaudeDep        S5002PeriodoPlanoSaudeDep[]
+  periodoDependentes S5002PeriodoDependente[]
+  deducoesDependente S5002PeriodoDedDep[]
+  pensoes            S5002PeriodoPensao[]
+  planosSaudeDep     S5002PeriodoPlanoSaudeDep[]
 
   @@unique([trabalhadorId, cpf])
-
   @@index([cpf])
-
   @@map("dependente_master")
 }
 
@@ -670,17 +660,17 @@ model DependenteMaster {
 //////////////////////////////////////////////////////
 
 model OperadoraSaude {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  cnpj                  String                    @unique
+  cnpj String @unique
 
-  registroAns           String?                   @map("registro_ans")
+  registroAns String? @map("registro_ans")
 
-  nome                  String?
+  nome String?
 
-  tipo                  TipoOperadora
+  tipo TipoOperadora
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   planosSaudeAnteriores S5002PeriodoPlanoSaude[]
 
@@ -692,19 +682,19 @@ model OperadoraSaude {
 //////////////////////////////////////////////////////
 
 model CertificadoDigital {
-  id                    String                    @id @default(cuid())
+  id String @id @default(cuid())
 
-  empresaId             String                    @map("empresa_id")
-  empresa               Empresa                   @relation(fields: [empresaId], references: [id])
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
 
-  nome                  String
-  validade              DateTime
-  fingerprint           String?
-  senhaCriptografada    String                    @map("senha_criptografada")
-  storagePath           String                    @map("storage_path")
+  nome               String
+  validade           DateTime
+  fingerprint        String?
+  senhaCriptografada String   @map("senha_criptografada")
+  storagePath        String   @map("storage_path")
 
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("certificado_digital")
 }
@@ -714,19 +704,19 @@ model CertificadoDigital {
 //////////////////////////////////////////////////////
 
 model EsocialDownloadControle {
-  id                    String                    @id @default(cuid())
-  
-  cnpjRaiz              String                    @unique @map("cnpj_raiz")
-  
-  perApur               String                    @map("per_apur")
-  
-  dhUltimoEvtRetornado  String?                   @map("dh_ultimo_evt_retornado")
-  
-  status                String                    @default("ATIVO")
-  
-  totalBaixado          Int                       @default(0) @map("total_baixado")
-  
-  updatedAt             DateTime?                 @updatedAt @map("updated_at")
+  id String @id @default(cuid())
+
+  cnpjRaiz String @unique @map("cnpj_raiz")
+
+  perApur String @map("per_apur")
+
+  dhUltimoEvtRetornado String? @map("dh_ultimo_evt_retornado")
+
+  status String @default("ATIVO")
+
+  totalBaixado Int @default(0) @map("total_baixado")
+
+  updatedAt DateTime? @updatedAt @map("updated_at")
 
   @@map("esocial_download_controle")
 }
@@ -753,12 +743,12 @@ model EsocialTabela01 {
 }
 
 model EsocialTabela03 {
-  id                          String    @id @default(cuid())
-  codigo                      String
-  nome                        String?
-  dtInicio                    DateTime  @map("dt_inicio")
-  dtFim                       DateTime? @map("dt_fim")
-  descricao                   String?
+  id                           String    @id @default(cuid())
+  codigo                       String
+  nome                         String?
+  dtInicio                     DateTime  @map("dt_inicio")
+  dtFim                        DateTime? @map("dt_fim")
+  descricao                    String?
   incidenciaExclusivaEmpregado String?   @map("inc_excl_emp")
 
   @@unique([codigo, dtInicio])
@@ -788,13 +778,13 @@ model EsocialTabela21 {
 }
 
 model EsocialImportLog {
-  id         String   @id @default(cuid())
-  tableId    String   @map("table_id")
-  fileName   String   @map("file_name")
-  processed  Int
-  errors     Int
-  status     String
-  createdAt  DateTime @default(now()) @map("created_at")
+  id        String   @id @default(cuid())
+  tableId   String   @map("table_id")
+  fileName  String   @map("file_name")
+  processed Int
+  errors    Int
+  status    String
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("esocial_import_logs")
 }
@@ -811,41 +801,41 @@ model EsocialTabela25 {
 }
 
 model EsocialTabela54 {
-  id              String    @id @default(cuid())
-  codRubrica      String    @map("cod_rubrica")
-  nomeRubrica     String?   @map("nome_rubrica")
-  dtInicio        DateTime  @map("dt_inicio")
-  dtFim           DateTime? @map("dt_fim")
-  natRubrica      String?   @map("nat_rubrica")
-  tipoRubrica     String?   @map("tipo_rubrica")
-  codIncCp        String?   @map("cod_inc_cp")
-  codIncIrrf      String?   @map("cod_inc_irrf")
-  codIncFgts      String?   @map("cod_inc_fgts")
-  codIncSind      String?   @map("cod_inc_sind")
-  repDsr          String?   @map("rep_dsr")
-  rep13           String?   @map("rep_13")
-  repFerias       String?   @map("rep_ferias")
-  repResc         String?   @map("rep_resc")
-  repAfast        String?   @map("rep_afast")
-  fatorRubr       String?   @map("fator_rubr")
-  localAplic      String?   @map("local_aplic")
-  domestica       String?   @map("domestica")
-  se              String?   @map("se")
-  geral           String?   @map("geral")
-  descricao       String?   @map("descricao")
-  nota            String?   @map("nota")
-  ordRescDom      String?   @map("ord_resc_dom")
-  perAdicRub      String?   @map("per_adic_rub")
-  ordRemDom       String?   @map("ord_rem_dom")
-  repSfDom        String?   @map("rep_sf_dom")
-  perFolRes       String?   @map("per_fol_res")
-  perEditRub      String?   @map("per_edit_rub")
-  perExcRub       String?   @map("per_exc_rub")
-  filCatRub       String?   @map("fil_cat_rub")
-  grupRendDom     String?   @map("grup_rend_dom")
-  codIncCprp      String?   @map("cod_inc_cprp")
-  codIncPisPasep  String?   @map("cod_inc_pis_pasep")
-  rdConsignado    String?   @map("rd_consignado")
+  id             String    @id @default(cuid())
+  codRubrica     String    @map("cod_rubrica")
+  nomeRubrica    String?   @map("nome_rubrica")
+  dtInicio       DateTime  @map("dt_inicio")
+  dtFim          DateTime? @map("dt_fim")
+  natRubrica     String?   @map("nat_rubrica")
+  tipoRubrica    String?   @map("tipo_rubrica")
+  codIncCp       String?   @map("cod_inc_cp")
+  codIncIrrf     String?   @map("cod_inc_irrf")
+  codIncFgts     String?   @map("cod_inc_fgts")
+  codIncSind     String?   @map("cod_inc_sind")
+  repDsr         String?   @map("rep_dsr")
+  rep13          String?   @map("rep_13")
+  repFerias      String?   @map("rep_ferias")
+  repResc        String?   @map("rep_resc")
+  repAfast       String?   @map("rep_afast")
+  fatorRubr      String?   @map("fator_rubr")
+  localAplic     String?   @map("local_aplic")
+  domestica      String?   @map("domestica")
+  se             String?   @map("se")
+  geral          String?   @map("geral")
+  descricao      String?   @map("descricao")
+  nota           String?   @map("nota")
+  ordRescDom     String?   @map("ord_resc_dom")
+  perAdicRub     String?   @map("per_adic_rub")
+  ordRemDom      String?   @map("ord_rem_dom")
+  repSfDom       String?   @map("rep_sf_dom")
+  perFolRes      String?   @map("per_fol_res")
+  perEditRub     String?   @map("per_edit_rub")
+  perExcRub      String?   @map("per_exc_rub")
+  filCatRub      String?   @map("fil_cat_rub")
+  grupRendDom    String?   @map("grup_rend_dom")
+  codIncCprp     String?   @map("cod_inc_cprp")
+  codIncPisPasep String?   @map("cod_inc_pis_pasep")
+  rdConsignado   String?   @map("rd_consignado")
 
   @@unique([codRubrica, dtInicio])
   @@map("esocial_tabela_54")
@@ -874,15 +864,392 @@ model EsocialTabela80 {
 }
 
 model DivergenciaFiscal {
-  id           String                     @id @default(cuid())
-  eventoId     String?                    @map("evento_id")
-  evento       EsocialEvento?             @relation(fields: [eventoId], references: [id])
-  tipo         String
-  descricao    String
-  severidade   String                     // BAIXA, MEDIA, ALTA, CRITICA
-  resolvido    Boolean                    @default(false)
-  createdAt    DateTime                   @default(now()) @map("created_at")
+  id         String         @id @default(cuid())
+  eventoId   String?        @map("evento_id")
+  evento     EsocialEvento? @relation(fields: [eventoId], references: [id])
+  tipo       String
+  descricao  String
+  severidade String // BAIXA, MEDIA, ALTA, CRITICA
+  resolvido  Boolean        @default(false)
+  createdAt  DateTime       @default(now()) @map("created_at")
 
   @@map("divergencia_fiscal")
+}
+
+//////////////////////////////////////////////////////
+// PRESTADOR DE SERVIÇO
+//////////////////////////////////////////////////////
+
+model PrestadorServico {
+  id String @id @default(cuid())
+
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  cnpj     String // 14 dígitos, sem máscara
+  cnpjRaiz String @map("cnpj_raiz")
+
+  razaoSocial  String  @map("razao_social")
+  nomeFantasia String? @map("nome_fantasia")
+
+  tipoServico   String? @map("tipo_servico")
+  codigoServico String? @map("codigo_servico")
+
+  email    String?
+  telefone String?
+
+  ativo Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Vínculos analíticos
+  r4020Eventos ReinfR4020[]
+
+  // Vínculos totalizadores (R-2099 — mantido)
+  r2099RTom ReinfRTom[]
+
+  @@unique([empresaId, cnpj])
+  @@index([cnpj])
+  @@index([cnpjRaiz])
+  @@map("prestador_servico")
+}
+
+//////////////////////////////////////////////////////
+// LOTE REINF
+//////////////////////////////////////////////////////
+
+model ReinfLote {
+  id String @id @default(cuid())
+
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  hashArquivo String  @map("hash_arquivo")
+  nomeArquivo String? @map("nome_arquivo")
+  storagePath String  @map("storage_path")
+
+  totalEventos Int                 @default(0) @map("total_eventos")
+  status       StatusProcessamento @default(pendente)
+  processadoEm DateTime?           @map("processado_em")
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  eventos ReinfEvento[]
+
+  @@index([hashArquivo])
+  @@map("reinf_lote")
+}
+
+//////////////////////////////////////////////////////
+// EVENTO BASE REINF (R-4020 e R-2099 compartilham)
+//////////////////////////////////////////////////////
+
+model ReinfEvento {
+  id String @id @default(cuid())
+
+  loteId String?    @map("lote_id")
+  lote   ReinfLote? @relation(fields: [loteId], references: [id])
+
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  idEvento String @unique @map("id_evento")
+  tpEvento String @map("tp_evento") // "R-4020" | "R-2099"
+  perApur  String @map("per_apur")
+
+  // Protocolo RFB
+  nrRecArqBase String?   @map("nr_rec_arq_base")
+  dhRecepcao   DateTime? @map("dh_recepcao")
+  dhProcess    DateTime? @map("dh_process")
+
+  // Contribuinte
+  cnpjRaiz String? @map("cnpj_raiz")
+
+  // Formato do XML: "evtPgtos" (original) | "evtRet" (recibo)
+  formatoXml String @default("evtRet") @map("formato_xml")
+
+  indRetif     Int                 @default(1) @map("ind_retif")
+  ativo        Boolean             @default(true)
+  status       StatusProcessamento @default(pendente)
+  processadoEm DateTime?           @map("processado_em")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  r4020        ReinfR4020Evento?
+  r2099        ReinfR2099?
+  divergencias ReinfDivergencia[]
+  historicos   ReinfEventoHistorico[]
+
+  @@index([empresaId, perApur])
+  @@index([cnpjRaiz, perApur])
+  @@map("reinf_evento")
+}
+
+//////////////////////////////////////////////////////
+// HISTÓRICO REINF
+//////////////////////////////////////////////////////
+
+model ReinfEventoHistorico {
+  id String @id @default(cuid())
+
+  eventoId String      @map("evento_id")
+  evento   ReinfEvento @relation(fields: [eventoId], references: [id])
+
+  acao          TipoAcaoHistorico
+  descricao     String?
+  payloadAntes  Json?             @map("payload_antes")
+  payloadDepois Json?             @map("payload_depois")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([eventoId])
+  @@map("reinf_evento_historico")
+}
+
+//////////////////////////////////////////////////////
+// R-4020 — CABEÇALHO DO EVENTO (1 por ReinfEvento)
+//////////////////////////////////////////////////////
+
+model ReinfR4020Evento {
+  id String @id @default(cuid())
+
+  eventoId String      @unique @map("evento_id")
+  evento   ReinfEvento @relation(fields: [eventoId], references: [id])
+
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  perApur String @map("per_apur")
+
+  // CNPJ completo do estabelecimento tomador (nrInsc do ideEstab)
+  cnpjEstab String @map("cnpj_estab")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Registros analíticos por prestador
+  registros ReinfR4020[]
+
+  @@index([empresaId, perApur])
+  @@map("reinf_r4020_evento")
+}
+
+//////////////////////////////////////////////////////
+// R-4020 — REGISTRO POR BENEFICIÁRIO/PRESTADOR
+// Um ReinfR4020Evento → N ReinfR4020 (um por nrInscBenef)
+//////////////////////////////////////////////////////
+
+model ReinfR4020 {
+  id String @id @default(cuid())
+
+  r4020EventoId String           @map("r4020_evento_id")
+  r4020Evento   ReinfR4020Evento @relation(fields: [r4020EventoId], references: [id])
+
+  // Vínculo com cadastro (pode ser null → gera divergência)
+  prestadorId String?           @map("prestador_id")
+  prestador   PrestadorServico? @relation(fields: [prestadorId], references: [id])
+
+  // CNPJ do beneficiário (prestador de serviço)
+  cnpjBenef String @map("cnpj_benef")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Retenções por CRMen (1:N — um prestador pode ter múltiplos CRMen)
+  retencoescrMen ReinfR4020CRMen[]
+
+  @@index([cnpjBenef])
+  @@map("reinf_r4020")
+}
+
+//////////////////////////////////////////////////////
+// R-4020 — RETENÇÃO POR CRMen (totApurMen)
+// Este é o nível atômico da auditoria fiscal REINF.
+// Um ReinfR4020 → N ReinfR4020CRMen
+//////////////////////////////////////////////////////
+
+model ReinfR4020CRMen {
+  id String @id @default(cuid())
+
+  r4020Id String     @map("r4020_id")
+  r4020   ReinfR4020 @relation(fields: [r4020Id], references: [id])
+
+  // CRMen: NUNCA descartar, NUNCA substituir por texto — persistir exato do XML
+  crMen String @map("cr_men")
+
+  // Base de cálculo e valor retido
+  vlrBaseCRMen Decimal @map("vlr_base_cr_men") @db.Decimal(14, 2)
+  vlrCRMenInf  Decimal @map("vlr_cr_men_inf") @db.Decimal(14, 2)
+
+  // Natureza do rendimento (código da tabela REINF)
+  natRend String? @map("nat_rend")
+
+  // Valor em suspensão (quando há discussão judicial)
+  vlrCRMenSusp Decimal @default(0) @map("vlr_cr_men_susp") @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([crMen])
+  @@map("reinf_r4020_cr_men")
+}
+
+//////////////////////////////////////////////////////
+// R-2099 — TOTALIZADOR OFICIAL (mantido integralmente)
+//////////////////////////////////////////////////////
+
+model ReinfR2099 {
+  id String @id @default(cuid())
+
+  eventoId String      @unique @map("evento_id")
+  evento   ReinfEvento @relation(fields: [eventoId], references: [id])
+
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  perApur         String  @map("per_apur")
+  indExistInfo    Int?    @map("ind_exist_info")
+  identEscritDCTF String? @map("ident_escrit_dctf")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  retencoesTomador ReinfRTom[]
+
+  @@index([empresaId, perApur])
+  @@map("reinf_r2099")
+}
+
+//////////////////////////////////////////////////////
+// R-2099 — RETENÇÃO POR TOMADOR (RTom)
+//////////////////////////////////////////////////////
+
+model ReinfRTom {
+  id String @id @default(cuid())
+
+  r2099Id String     @map("r2099_id")
+  r2099   ReinfR2099 @relation(fields: [r2099Id], references: [id])
+
+  prestadorId String?           @map("prestador_id")
+  prestador   PrestadorServico? @relation(fields: [prestadorId], references: [id])
+
+  cnpjPrestador   String  @map("cnpj_prestador")
+  vlrTotalBaseRet Decimal @map("vlr_total_base_ret") @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  codigosReceita ReinfCRTom[]
+
+  @@index([cnpjPrestador])
+  @@map("reinf_rtom")
+}
+
+//////////////////////////////////////////////////////
+// R-2099 — CÓDIGO DE RECEITA POR TOMADOR
+//////////////////////////////////////////////////////
+
+model ReinfCRTom {
+  id String @id @default(cuid())
+
+  rTomId String    @map("rtom_id")
+  rTom   ReinfRTom @relation(fields: [rTomId], references: [id])
+
+  crTom        String  @map("cr_tom")
+  vlrCRTom     Decimal @map("vlr_cr_tom") @db.Decimal(14, 2)
+  vlrCRTomSusp Decimal @default(0) @map("vlr_cr_tom_susp") @db.Decimal(14, 2)
+
+  @@map("reinf_cr_tom")
+}
+
+//////////////////////////////////////////////////////
+// DIVERGÊNCIAS REINF
+//////////////////////////////////////////////////////
+
+model ReinfDivergencia {
+  id String @id @default(cuid())
+
+  eventoId String?      @map("evento_id")
+  evento   ReinfEvento? @relation(fields: [eventoId], references: [id])
+
+  tipo       String
+  descricao  String
+  severidade String // BAIXA, MEDIA, ALTA, CRITICA
+  resolvido  Boolean @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("reinf_divergencia")
+}
+
+//////////////////////////////////////////////////////
+// USUARIOS (AUTENTICAÇÃO)
+//////////////////////////////////////////////////////
+
+model Usuario {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  nome      String
+  senha     String   // Senha padrão ou customizada
+  perfil    String   // superAdmin, Admin, user
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("usuario")
+}
+
+//////////////////////////////////////////////////////
+// MÓDULO DE CONSULTAS ESPECIAIS
+//////////////////////////////////////////////////////
+
+model ConsultaEspecial {
+  id            String    @id @default(cuid())
+
+  titulo        String
+  descricao     String?
+
+  // "sql_livre" | "visual"
+  tipo          String    @default("sql_livre")
+
+  // SQL final persistido (gerado pelo editor ou pelo builder)
+  sqlTexto      String    @map("sql_texto") @db.Text
+
+  // Parâmetros do builder visual (JSON com filtros configurados)
+  parametros    Json?
+
+  // Controle
+  criadoPor     String    @map("criado_por")   // userId do SuperAdmin
+  ativo         Boolean   @default(true)
+  favorito      Boolean   @default(false)
+
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  execucoes     ConsultaExecucao[]
+
+  @@map("consulta_especial")
+}
+
+model ConsultaExecucao {
+  id              String            @id @default(cuid())
+
+  consultaId      String?           @map("consulta_id")
+  consulta        ConsultaEspecial? @relation(fields: [consultaId], references: [id])
+
+  // SQL exato que foi executado (pode diferir do salvo se editado ad-hoc)
+  sqlExecutado    String            @map("sql_executado") @db.Text
+
+  // Resultado resumido para log (nunca salvar dados sensíveis aqui)
+  totalLinhas     Int               @default(0) @map("total_linhas")
+  duracaoMs       Int               @default(0) @map("duracao_ms")
+
+  // "sucesso" | "erro" | "timeout" | "bloqueado"
+  status          String            @default("sucesso")
+  mensagemErro    String?           @map("mensagem_erro") @db.Text
+
+  executadoPor    String            @map("executado_por")
+
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  @@index([consultaId])
+  @@index([executadoPor])
+  @@map("consulta_execucao")
 }
 
