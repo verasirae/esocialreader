@@ -23,6 +23,7 @@ import {
   Phone,
   HelpCircle
 } from "lucide-react";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { cn, safeJsonFetch } from "@/lib/utils";
 
 interface Prestador {
@@ -355,7 +356,7 @@ export default function ReinfPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-32 h-[50vh] gap-4">
-        <Loader2 className="animate-spin text-indigo-600" size={40} />
+        <LoadingSpinner size="lg" />
         <p className="text-sm font-bold uppercase tracking-widest text-secondary">Carregando ambiente fiscal...</p>
       </div>
     );
@@ -476,7 +477,7 @@ export default function ReinfPage() {
             {/* List results */}
             {isLoadingData ? (
               <div className="flex justify-center items-center p-20 bg-white border border-outline-variant">
-                <Loader2 size={24} className="animate-spin text-indigo-600 mr-2" />
+                <LoadingSpinner size="sm" className="mr-2" />
                 <span className="text-xs font-semibold text-secondary uppercase">Processando base...</span>
               </div>
             ) : prestadores.length === 0 ? (
@@ -565,7 +566,7 @@ export default function ReinfPage() {
               >
                 {isUploading ? (
                   <div className="w-full flex flex-col items-center gap-4 py-8">
-                    <Loader2 className="animate-spin text-indigo-600" size={32} />
+                    <LoadingSpinner size="md" />
                     <div className="w-full max-w-[200px]">
                       <div className="flex justify-between items-center text-[10px] font-black uppercase text-secondary mb-1">
                         <span>Carregando XML</span>
@@ -646,7 +647,7 @@ export default function ReinfPage() {
 
               {isLoadingData ? (
                 <div className="p-20 flex justify-center items-center">
-                  <Loader2 size={24} className="animate-spin text-indigo-600" />
+                  <LoadingSpinner size="sm" />
                 </div>
               ) : eventos.length === 0 ? (
                 <div className="p-16 text-center italic text-xs text-secondary">

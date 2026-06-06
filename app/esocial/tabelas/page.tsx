@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn, fetchWithRetry } from "@/lib/utils";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 const TABLES = [
   { id: "01", name: "Tabela 01 - Categorias de Trabalhadores - eSocial" },
@@ -134,7 +135,7 @@ export default function TablesImportPage() {
             onClick={() => document.getElementById("table-upload")?.click()}
           >
             <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center">
-              {isUploading ? <Loader2 className="animate-spin text-primary" size={32} /> : <FileSpreadsheet className="text-secondary" size={32} />}
+              {isUploading ? <LoadingSpinner size="lg" /> : <FileSpreadsheet className="text-secondary" size={32} />}
             </div>
             <div className="text-center">
               <p className="text-sm font-black text-on-surface">Clique para selecionar o CSV</p>

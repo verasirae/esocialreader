@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn, safeJsonFetch } from "@/lib/utils";
 import Link from "next/link";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function PeriodosFiscaisPage() {
   const [periodos, setPeriodos] = useState<any[]>([]);
@@ -117,7 +118,7 @@ export default function PeriodosFiscaisPage() {
       {/* Grid */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <Loader2 className="animate-spin text-primary" size={40} />
+          <LoadingSpinner size="lg" />
           <span className="text-sm font-black text-secondary uppercase tracking-widest">Carregando períodos...</span>
         </div>
       ) : filteredPeriodos.length > 0 ? (
@@ -234,7 +235,7 @@ export default function PeriodosFiscaisPage() {
                   disabled={isSubmitting}
                   className="flex-1 btn-primary py-4 font-bold flex items-center justify-center gap-2 border-none shadow-lg shadow-primary/20"
                 >
-                  {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <><CheckCircle2 size={18} /> Cadastrar</>}
+                  {isSubmitting ? <LoadingSpinner size="sm" /> : <><CheckCircle2 size={18} /> Cadastrar</>}
                 </button>
               </div>
             </form>

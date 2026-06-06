@@ -22,6 +22,7 @@ import {
   Calendar
 } from "lucide-react";
 import { cn, safeJsonFetch } from "@/lib/utils";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -213,7 +214,7 @@ export default function Dashboard() {
         <section className="card p-lg bg-surface-container border-b-2 border-secondary mb-4 p-6 animate-pulse">
            <div className="flex justify-between items-center mb-2">
               <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-secondary">
-                <Loader2 size={12} className="animate-spin text-secondary" />
+                <LoadingSpinner size="xs" />
                 Sincronizando Consolidação Fiscal e Processando Lotes XML ({syncCounts.pendingCount + syncCounts.processingCount} lote(s) pendente(s))
               </span>
               <span className="text-[10px] font-black p-1 bg-secondary/15 rounded text-secondary animate-pulse">Processando Fila</span>
@@ -261,7 +262,7 @@ export default function Dashboard() {
           onClick={() => !isUploading && document.getElementById("xml-upload-main")?.click()}
         >
           <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-widest">
-            {isUploading ? <Loader2 className="animate-spin" size={16} /> : <CloudUpload size={18} />}
+            {isUploading ? <LoadingSpinner size="xs" /> : <CloudUpload size={18} />}
             {isUploading ? "Processando..." : "Importar XMLs"}
           </div>
         </div>
@@ -316,7 +317,7 @@ export default function Dashboard() {
         
         {isLoadingCalendar ? (
           <div className="flex flex-col items-center justify-center p-20 gap-4 opacity-50">
-             <Loader2 size={40} className="animate-spin text-primary" />
+             <LoadingSpinner size="lg" />
              <p className="text-xs font-bold uppercase tracking-widest">Sincronizando Consolidação Fiscal...</p>
           </div>
         ) : fiscalCalendar.length === 0 ? (
@@ -425,7 +426,7 @@ export default function Dashboard() {
                <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-outline-variant">
                   {isLoadingHistory ? (
                     <div className="h-full flex items-center justify-center opacity-50">
-                       <Loader2 className="animate-spin" size={24} />
+                       <LoadingSpinner size="sm" />
                     </div>
                   ) : history.length === 0 ? (
                     <div className="h-full flex items-center justify-center italic text-xs opacity-30">

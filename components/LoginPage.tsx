@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Shield, Lock, Mail, ArrowRight, Eye, EyeOff, Check, Construction } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import LoadingSpinner from "./LoadingSpinner";
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -219,13 +220,7 @@ export function LoginPage() {
                 </label>
               </div>
 
-              {/* Signup trigger note info */}
-              <div className="bg-surface-container/40 border border-outline-variant/50 p-3 rounded-sm flex items-start gap-2.5 text-[10px] leading-tight text-secondary font-medium">
-                <div className="shrink-0 w-2.5 h-2.5 rounded-full bg-[#1B365D] flex items-center justify-center text-white p-1 font-mono text-[8px] font-black mt-0.5">i</div>
-                <p>
-                  Acesso restrito. Sem usuários cadastrados? Utilize a credencial inicial <strong className="text-[#1B365D]">admin@compliance.com</strong> com a senha padrão <strong className="text-[#1B365D]">senha123</strong>.
-                </p>
-              </div>
+
 
               {/* Button: Sign In */}
               <button
@@ -236,7 +231,7 @@ export function LoginPage() {
               >
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    <LoadingSpinner size="xs" className="!text-white !border-b-white" />
                     AUTENTICANDO...
                   </span>
                 ) : (

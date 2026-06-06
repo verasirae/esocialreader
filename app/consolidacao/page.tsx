@@ -19,10 +19,11 @@ import {
 } from "lucide-react";
 import { cn, safeJsonFetch } from "@/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function ConsolidacaoFiscalPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>}>
+    <Suspense fallback={<div className="flex items-center justify-center p-20"><LoadingSpinner /></div>}>
       <ConsolidacaoFiscalContent />
     </Suspense>
   );
@@ -207,7 +208,7 @@ function ConsolidacaoFiscalContent() {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-20 gap-4">
-        <Loader2 className="animate-spin text-primary w-12 h-12" />
+        <LoadingSpinner size="lg" />
         <p className="text-secondary font-medium animate-pulse text-sm">Carregando demonstrativos consolidados...</p>
       </div>
     );
@@ -651,7 +652,7 @@ function DetailedConsolidationView({
             <div className="p-6">
               {currentTabLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4 min-h-[300px]">
-                  <Loader2 className="animate-spin text-primary w-10 h-10" />
+                  <LoadingSpinner size="md" />
                   <p className="text-secondary text-xs italic font-medium">
                     {tabLoadingMessages[activeTab] || "Carregando dados..."}
                   </p>
@@ -773,7 +774,18 @@ const fiscalNatureLabels: Record<string, string> = {
 
 import { FiscalNature } from "@/lib/fiscal/engine";
 
-function RendimentosTab({ data, selectedMonth, onBack }: any) {
+function RendimentosTab({ data: rawData, selectedMonth, onBack }: any) {
+  const data = useMemo(() => {
+    if (!rawData) return null;
+    return {
+      ...rawData,
+      auditEntries: [
+        ...(rawData.auditEntries || []),
+        ...(rawData.auditEntriesReinf || [])
+      ]
+    };
+  }, [rawData]);
+
   const [showAudit, setShowAudit] = useState(false);
   const [auditPage, setAuditPage] = useState(1);
   const [auditSearch, setAuditSearch] = useState("");
@@ -996,7 +1008,7 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
   if (!values) {
     return (
       <div className="py-20 flex flex-col items-center justify-center gap-3">
-        <Loader2 className="animate-spin text-primary" />
+        <LoadingSpinner size="md" />
         <span className="text-secondary text-[10px]">Carregando detalhamento...</span>
       </div>
     );
@@ -1299,46 +1311,52 @@ function RendimentosTab({ data, selectedMonth, onBack }: any) {
 
 function RendimentosSummaryTab({ data, isLoading, onShowDetail }: any) {
   const summaryRows = useMemo(() => {
-    if (!data?.auditEntries) return [];
-    
-    const codeLabels: Record<string, string> = {
-      "0561": "0561 - Rendimentos do trabalho assalariado",
-      "0581": "0581 - Rendimentos do trabalho assalariado (Exterior)",
-      "0588": "0588 - Rendimentos do trabalho sem vínculo empregatício",
-      "1708": "1708 - Remuneração de serviços profissionais prestados por pessoa jurídica",
-      "5952": "5952 - Retenções de contribuições pagamento PJ a PJ de direito privado",
-      "3562": "3562 - Participação dos trabalhadores em Lucros ou Resultados (PLR)",
-      "3533": "3533 - Proventos de aposentadoria, reserva, reforma ou pensão pagos por previdência pública",
-      "1889": "1889 - Rendimentos recebidos acumuladamente",
-    };
+    // Aceita tanto auditEntries (S-5002) quanto auditEntriesReinf (R-4020),
+    // que agora chegam juntos no mesmo array via route.ts patchado
+    const allEntries = [
+      ...(data?.auditEntries || []),
+      ...(data?.auditEntriesReinf || [])
+    ];
 
-    // Group by the 4-digit base of the Revenue Code (tpCR)
-    const grouped = new Map<string, any>();
+    if (allEntries.length === 0) return [];
 
-    data.auditEntries.forEach((entry: any) => {
+    const grouped = new Map<string, {
+      code: string;
+      tributavel: number;
+      deducoes: number;
+      irrf: number;
+      isento: number;
+      acao: number;
+    }>();
+
+    allEntries.forEach((entry: any) => {
       if (entry.incluido === false || entry.ativoFiscal === false || entry.valorCompoeBase === false) {
         return;
       }
-      let rawCr = entry.tpCR || "0561";
-      if (rawCr.includes("-")) {
-        rawCr = rawCr.replace("-", "");
-      }
-      let baseCr = rawCr.substring(0, 4);
-      if (!/^\d{4}$/.test(baseCr)) {
-        baseCr = "0561";
-      }
 
-      const existing = grouped.get(baseCr) || { 
-        code: codeLabels[baseCr] || `${baseCr} - Outros rendimentos`,
-        tributavel: 0, 
-        deducoes: 0, 
-        irrf: 0, 
-        isento: 0, 
-        acao: 0 
+      // Normaliza para 4 dígitos — funciona para "056107", "170806", "0561", "5952"
+      let rawCr = (entry.tpCR || entry.cr || "0561").replace(/-/g, "");
+      let baseCr = rawCr.replace(/\D/g, "").substring(0, 4);
+      if (!/^\d{4}$/.test(baseCr)) baseCr = "0561";
+
+      // Descrição: prioriza a que vem do backend (rfb_codigo_receita), 
+      // fallback para o que já estava no entry
+      const descricaoBackend = data?.codigosReceita?.[baseCr];
+      const label = descricaoBackend
+        ? `${baseCr} - ${descricaoBackend}`
+        : `${baseCr} - ${entry.descricaoOficial || "Outros rendimentos"}`;
+
+      const existing = grouped.get(baseCr) || {
+        code: label,
+        tributavel: 0,
+        deducoes: 0,
+        irrf: 0,
+        isento: 0,
+        acao: 0
       };
 
       const nature = entry.fiscalNature;
-      
+
       if (nature === "REND_TRIBUTAVEL") {
         existing.tributavel += entry.valor;
       } else if (["PREVIDENCIA_OFICIAL", "PREVIDENCIA_COMPLEMENTAR", "DEPENDENTE", "PENSAO", "PLANO_SAUDE", "SIMPLIFICADO"].includes(nature)) {
@@ -1347,12 +1365,17 @@ function RendimentosSummaryTab({ data, isLoading, onShowDetail }: any) {
         existing.irrf += entry.valor;
       } else if (nature === "ISENTO") {
         existing.isento += entry.valor;
+      } else if (entry.metadata?.tipoValor === "suspensao") {
+        existing.acao += entry.valor;
       }
 
       grouped.set(baseCr, existing);
     });
 
-    return Array.from(grouped.values());
+    // Ordena por código
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([_, v]) => v);
   }, [data]);
 
   const total = useMemo(() => {
@@ -1370,7 +1393,7 @@ function RendimentosSummaryTab({ data, isLoading, onShowDetail }: any) {
   if (isLoading) {
     return (
       <div className="py-20 flex flex-col items-center justify-center gap-3">
-        <Loader2 className="animate-spin text-primary" />
+        <LoadingSpinner size="md" />
         <span className="text-secondary text-[10px]">Carregando detalhamento de rendimentos...</span>
       </div>
     );
@@ -2107,7 +2130,7 @@ function PlanoSaudeTab({ data, isLoading }: any) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4 bg-white border border-outline-variant rounded-sm">
-        <Loader2 className="animate-spin text-primary w-8 h-8" />
+        <LoadingSpinner size="sm" />
         <p className="text-secondary text-xs italic">Carregando dados reais do plano de saúde...</p>
       </div>
     );
@@ -2150,7 +2173,7 @@ function TrabalhadoresTab({ data, isLoading, selectedYear, selectedMonth }: any)
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <Loader2 className="animate-spin text-primary w-8 h-8" />
+        <LoadingSpinner size="sm" />
         <p className="text-secondary text-xs italic">Carregando detalhamento por trabalhador...</p>
       </div>
     );

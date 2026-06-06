@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Shield, Loader2, ChevronDown, Check, Edit3 } from "lucide-react";
+import { Shield, ChevronDown, Check, Edit3 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
+import LoadingSpinner from "./LoadingSpinner";
 
 export function RegisterOperadoraModal() {
   const { isRegisterOperadoraModalOpen, closeRegisterOperadoraModal, editingOperadora } = useModals();
@@ -188,7 +189,7 @@ export function RegisterOperadoraModal() {
               className="flex-1 bg-primary text-white py-3 rounded-sm text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
               disabled={isLoading}
             >
-              {isLoading ? <Loader2 size={16} className="animate-spin" /> : (editingOperadora ? <Check size={16} /> : <Check size={16} />)}
+              {isLoading ? <LoadingSpinner size="xs" /> : (editingOperadora ? <Check size={16} /> : <Check size={16} />)}
               <span>{editingOperadora ? "Salvar Alterações" : "Salvar Operadora"}</span>
             </button>
           </div>

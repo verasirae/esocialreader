@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { usePathname } from "next/navigation";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { cn } from "@/lib/utils";
 
 interface UsuarioData {
@@ -427,7 +428,7 @@ export default function SettingsPage() {
                 {/* Users List Data Table / Grid */}
                 {loadingUsers ? (
                   <div className="py-20 flex flex-col items-center justify-center gap-3">
-                    <Loader2 className="animate-spin text-primary" size={28} />
+                    <LoadingSpinner size="lg" />
                     <span className="text-[10px] font-bold text-secondary uppercase tracking-widest">Carregando usuários do sistema...</span>
                   </div>
                 ) : filteredUsers.length === 0 ? (
@@ -504,7 +505,7 @@ export default function SettingsPage() {
                                   title={isSelf ? "Não é possível desativar si mesmo" : "Mudar Status"}
                                 >
                                   {isStatusActionLoading ? (
-                                    <Loader2 className="animate-spin" size={10} />
+                                    <LoadingSpinner size="xs" />
                                   ) : u.ativo ? (
                                     <UserCheck size={11} />
                                   ) : (
@@ -529,7 +530,7 @@ export default function SettingsPage() {
                                     className="p-1.5 text-secondary hover:text-indigo-600 hover:bg-[#FAF9FC] border border-transparent hover:border-outline-variant rounded transition-colors active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
                                     title="Resetar senha para padrão (senha123)"
                                   >
-                                    {isResetActionLoading ? <Loader2 className="animate-spin" size={14} /> : <Key size={14} />}
+                                    {isResetActionLoading ? <LoadingSpinner size="xs" /> : <Key size={14} />}
                                   </button>
                                   
                                   {/* Delete Account */}
@@ -539,7 +540,7 @@ export default function SettingsPage() {
                                     className="p-1.5 text-secondary hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 rounded transition-colors active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
                                     title="Excluir Usuário"
                                   >
-                                    {isDeleteActionLoading ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                                    {isDeleteActionLoading ? <LoadingSpinner size="xs" /> : <Trash2 size={14} />}
                                   </button>
                                 </div>
                               </td>
@@ -633,7 +634,7 @@ export default function SettingsPage() {
                           disabled={isSubmitting}
                           className="flex-1 bg-[#1B365D] hover:bg-[#152a4a] text-white font-bold text-[10px] uppercase tracking-wider py-2 rounded-sm active:scale-95 transition-all flex items-center justify-center gap-1 disabled:opacity-50"
                         >
-                          {isSubmitting ? <Loader2 className="animate-spin" size={12} /> : null}
+                          {isSubmitting ? <LoadingSpinner size="xs" /> : null}
                           CADASTRAR
                         </button>
                       </div>

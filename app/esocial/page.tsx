@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { cn, safeJsonFetch } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 const tableCards = [
   { id: "01", icon: Users, label: "Tabela 01", sub: "Categorias de Trabalhadores - eSocial", type: "OFICIAL", lastUpdate: "12/05/2024" },
@@ -44,7 +45,7 @@ const tableCards = [
 
 export default function EsocialTablesPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>}>
+    <Suspense fallback={<div className="flex items-center justify-center p-20"><LoadingSpinner /></div>}>
       <EsocialTablesContent />
     </Suspense>
   );
@@ -685,7 +686,7 @@ function EsocialTablesContent() {
                 disabled={isLoading || !selectedTrabalhador}
                 className="btn-primary px-6 py-2 flex items-center gap-2"
               >
-                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <TrendingUp size={16} />}
+                {isLoading ? <LoadingSpinner size="xs" /> : <TrendingUp size={16} />}
                 <span className="text-xs font-bold uppercase tracking-widest">Atualizar Tabela</span>
               </button>
             </div>
@@ -697,7 +698,7 @@ function EsocialTablesContent() {
               </div>
             ) : isLoading ? (
               <div className="flex items-center justify-center py-24">
-                <Loader2 size={40} className="animate-spin text-primary opacity-20" />
+                <LoadingSpinner size="lg" />
               </div>
             ) : (
               <div className="overflow-x-auto border border-outline-variant rounded-sm">
@@ -858,7 +859,7 @@ function EsocialTablesContent() {
                     >
                       {isUploading ? (
                         <>
-                          <Loader2 size={18} className="animate-spin" />
+                          <LoadingSpinner size="sm" className="opacity-80" />
                           <span className="font-black uppercase tracking-widest text-xs">Processando XMLs...</span>
                         </>
                       ) : (
@@ -1157,7 +1158,7 @@ function EsocialTablesContent() {
                 <tbody className="divide-y divide-outline-variant">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={5} className="px-lg py-20 text-center"><Loader2 size={32} className="animate-spin text-primary inline-block opacity-20" /></td>
+                      <td colSpan={5} className="px-lg py-20 text-center"><LoadingSpinner size="md" className="inline-block" /></td>
                     </tr>
                   ) : divergenciasData.length === 0 ? (
                     <tr>
@@ -1249,7 +1250,7 @@ function EsocialTablesContent() {
                 disabled={isConsolidating || !selectedPeriodo}
                 onClick={handleConsolidation}
               >
-                {isConsolidating ? <Loader2 size={14} className="animate-spin" /> : <Settings2 size={14} />}
+                {isConsolidating ? <LoadingSpinner size="xs" /> : <Settings2 size={14} />}
                 <span>Processar Consolidação</span>
               </button>
             </div>
@@ -1271,7 +1272,7 @@ function EsocialTablesContent() {
               <tbody className="divide-y divide-outline-variant">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-lg py-20 text-center"><Loader2 size={32} className="animate-spin text-primary inline-block opacity-20" /></td>
+                    <td colSpan={7} className="px-lg py-20 text-center"><LoadingSpinner size="md" className="inline-block" /></td>
                   </tr>
                 ) : fechamentosData.length === 0 ? (
                   <tr>
@@ -1391,7 +1392,7 @@ function EsocialTablesContent() {
               <tbody className="divide-y divide-outline-variant">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-lg py-20 text-center"><Loader2 size={32} className="animate-spin text-primary inline-block opacity-20" /></td>
+                    <td colSpan={7} className="px-lg py-20 text-center"><LoadingSpinner size="md" className="inline-block" /></td>
                   </tr>
                 ) : auditData.length === 0 ? (
                   <tr>
@@ -1563,7 +1564,7 @@ function EsocialTablesContent() {
         {isUploading && (
           <div className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
             <div className="bg-white p-8 rounded-sm shadow-2xl flex flex-col items-center gap-4 max-w-xs w-full">
-              <Loader2 className="animate-spin text-primary" size={48} />
+              <LoadingSpinner size="lg" />
               <div className="text-center">
                 <p className="text-sm font-black text-on-surface uppercase tracking-widest">Processando Auditoria...</p>
                 <p className="text-[10px] text-secondary font-medium italic mt-1">Isso pode levar alguns minutos dependendo do volume de arquivos.</p>
@@ -1699,7 +1700,7 @@ function EsocialTablesContent() {
                   <tr>
                     <td colSpan={selectedTable === "54" ? 10 : 6} className="px-lg py-20 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <Loader2 size={32} className="animate-spin text-primary opacity-20" />
+                        <LoadingSpinner size="md" />
                         <p className="text-xs font-bold text-secondary uppercase tracking-widest">Carregando dados...</p>
                       </div>
                     </td>
@@ -1922,7 +1923,7 @@ function EsocialTablesContent() {
                   onClick={() => document.getElementById("footer-upload")?.click()}
                 >
                     <div className="p-4 bg-white/10 rounded-full text-white group-hover/drop:scale-110 transition-transform">
-                      {isUploading ? <Loader2 size={32} className="animate-spin" /> : <CloudUpload size={32} />}
+                      {isUploading ? <LoadingSpinner size="lg" /> : <CloudUpload size={32} />}
                     </div>
                     <div>
                       <p className="text-white font-bold text-xs uppercase tracking-widest">Soltar CSV aqui</p>
@@ -1946,7 +1947,7 @@ function EsocialTablesContent() {
         <div className="card bg-white border-l-4 border-primary p-6 animate-pulse shadow-sm rounded-lg flex flex-col gap-2 -mx-2 mt-2">
            <div className="flex justify-between items-center">
               <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#6c5ecf]">
-                <Loader2 size={12} className="animate-spin text-[#6c5ecf]" />
+                <LoadingSpinner size="xs" />
                 Sincronizando Consolidação e Calculando Alíquotas ({syncCounts.pendingCount + syncCounts.processingCount} lote(s) pendente(s))
               </span>
               <span className="text-[9px] font-black p-1 bg-[#6c5ecf]/10 rounded text-[#6c5ecf] animate-pulse">Sincronizando Fila S-5002</span>

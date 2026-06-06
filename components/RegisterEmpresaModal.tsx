@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, Loader2, ChevronDown, Edit3, Check } from "lucide-react";
+import { Plus, ChevronDown, Edit3, Check } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
+import LoadingSpinner from "./LoadingSpinner";
 
 export function RegisterEmpresaModal() {
   const { isRegisterEmpresaModalOpen, closeRegisterEmpresaModal, editingEmpresa } = useModals();
@@ -142,7 +143,7 @@ export function RegisterEmpresaModal() {
               className="flex-1 bg-primary text-white py-3 rounded-sm text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
               disabled={isLoading}
             >
-              {isLoading ? <Loader2 size={16} className="animate-spin" /> : (editingEmpresa ? <Check size={16} /> : <Plus size={16} />)}
+              {isLoading ? <LoadingSpinner size="xs" /> : (editingEmpresa ? <Check size={16} /> : <Plus size={16} />)}
               <span>{editingEmpresa ? "Salvar Alterações" : "Salvar Empregador"}</span>
             </button>
           </div>

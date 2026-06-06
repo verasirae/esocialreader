@@ -1363,4 +1363,171 @@ export class FiscalEngine {
 
     return divergencias;
   }
+
+  /**
+   * Constrói a trilha de auditoria fiscal do REINF R-4020.
+   * Paralela ao buildAuditTrail do S-5002 — mesma interface AuditEntry,
+   * permitindo agregação unificada por código de receita.
+   */
+  public static async buildAuditTrailReinf(
+    empresaId: string,
+    ano: string,
+    mes?: string
+  ): Promise<AuditEntry[]> {
+    // Padrão de período para filtro
+    const perApurPattern = mes ? `${ano}-${mes}` : { startsWith: ano };
+
+    // Busca todos os eventos R-4020 ativos da empresa no período
+    const r4020Eventos = await prisma.reinfR4020Evento.findMany({
+      where: {
+        empresaId,
+        perApur: perApurPattern as any
+      },
+      include: {
+        evento: {
+          select: { id: true, idEvento: true, ativo: true }
+        },
+        registros: {
+          include: {
+            prestador: { select: { razaoSocial: true, cnpj: true } },
+            retencoescrMen: true
+          }
+        }
+      }
+    });
+
+    // Filtra apenas eventos ativos
+    const eventosAtivos = r4020Eventos.filter(e => e.evento?.ativo !== false);
+
+    if (eventosAtivos.length === 0) return [];
+
+    const candidates: AuditEntry[] = [];
+
+    for (const evt of eventosAtivos) {
+      const perApurEvento = evt.perApur;
+
+      for (const registro of evt.registros) {
+        const prestadorNome = registro.prestador?.razaoSocial || "PRESTADOR NÃO IDENTIFICADO";
+        const prestadorCnpj = registro.prestador?.cnpj || registro.cnpjBenef;
+
+        for (const cr of registro.retencoescrMen) {
+          if (!cr.crMen) continue;
+
+          const vlrBase    = Number(cr.vlrBaseCRMen);
+          const vlrRetido  = Number(cr.vlrCRMenInf);
+          const vlrSusp    = Number(cr.vlrCRMenSusp ?? 0);
+
+          // ─── Rendimento Tributável ────────────────────────────────────────────
+          if (vlrBase > 0) {
+            candidates.push({
+              trabalhador: prestadorNome,
+              cpf: prestadorCnpj,
+              perApur: perApurEvento,
+              origemTabela: "reinf_r4020_cr_men",
+              origemId: `${cr.id}_base`,
+              categoriaFiscal: "Rendimento Tributável REINF",
+              fiscalNature: FiscalNature.REND_TRIBUTAVEL,
+              codigoOficial: cr.crMen,
+              descricaoOficial: `Rendimento tributável REINF (CRMen: ${cr.crMen})`,
+              cr: cr.crMen,
+              valor: vlrBase,
+              metadata: {
+                crMen: cr.crMen,
+                cnpjBenef: registro.cnpjBenef,
+                natRend: cr.natRend,
+                origemReinf: true
+              },
+              tpCR: cr.crMen,
+              tpInfoIR: cr.crMen,
+              origem: "reinf_r4020",
+              grupo: "CONSOLIDADO",
+              ativoFiscal: true,
+              statusFiscal: StatusFiscal.ATIVO,
+              perFiscal: perApurEvento,
+              perApurEvento,
+              incluido: true,
+              valorOriginal: vlrBase,
+              valorCompoeBase: true,
+              regraAplicada: "R-4020 vlrBaseCRMen",
+              motivoInclusao: "Base de cálculo do R-4020."
+            });
+          }
+
+          // ─── Imposto Retido ───────────────────────────────────────────────────
+          if (vlrRetido > 0) {
+            candidates.push({
+              trabalhador: prestadorNome,
+              cpf: prestadorCnpj,
+              perApur: perApurEvento,
+              origemTabela: "reinf_r4020_cr_men",
+              origemId: `${cr.id}_irrf`,
+              categoriaFiscal: "Imposto Retido REINF",
+              fiscalNature: FiscalNature.IRRF_RETIDO,
+              codigoOficial: cr.crMen,
+              descricaoOficial: `Imposto retido REINF (CRMen: ${cr.crMen})`,
+              cr: cr.crMen,
+              valor: vlrRetido,
+              metadata: {
+                crMen: cr.crMen,
+                cnpjBenef: registro.cnpjBenef,
+                natRend: cr.natRend,
+                origemReinf: true
+              },
+              tpCR: cr.crMen,
+              tpInfoIR: cr.crMen,
+              origem: "reinf_r4020",
+              grupo: "CONSOLIDADO",
+              ativoFiscal: true,
+              statusFiscal: StatusFiscal.ATIVO,
+              perFiscal: perApurEvento,
+              perApurEvento,
+              incluido: true,
+              valorOriginal: vlrRetido,
+              valorCompoeBase: true,
+              regraAplicada: "R-4020 vlrCRMenInf",
+              motivoInclusao: "Imposto retido na fonte R-4020."
+            });
+          }
+
+          // ─── Despesa com Ação Judicial (suspensão) ────────────────────────────
+          if (vlrSusp > 0) {
+            candidates.push({
+              trabalhador: prestadorNome,
+              cpf: prestadorCnpj,
+              perApur: perApurEvento,
+              origemTabela: "reinf_r4020_cr_men",
+              origemId: `${cr.id}_susp`,
+              categoriaFiscal: "Exigibilidade Suspensa REINF",
+              fiscalNature: FiscalNature.OUTROS,
+              codigoOficial: cr.crMen,
+              descricaoOficial: `Valor com exigibilidade suspensa (CRMen: ${cr.crMen})`,
+              cr: cr.crMen,
+              valor: vlrSusp,
+              metadata: {
+                crMen: cr.crMen,
+                cnpjBenef: registro.cnpjBenef,
+                origemReinf: true,
+                tipoValor: "suspensao"
+              },
+              tpCR: cr.crMen,
+              tpInfoIR: cr.crMen,
+              origem: "reinf_r4020",
+              grupo: "CONSOLIDADO",
+              ativoFiscal: true,
+              statusFiscal: StatusFiscal.ATIVO,
+              perFiscal: perApurEvento,
+              perApurEvento,
+              incluido: true,
+              valorOriginal: vlrSusp,
+              valorCompoeBase: true,
+              regraAplicada: "R-4020 vlrCRMenSusp",
+              motivoInclusao: "Valor com exigibilidade suspensa por decisão judicial."
+            });
+          }
+        }
+      }
+    }
+
+    return candidates;
+  }
 }

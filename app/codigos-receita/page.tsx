@@ -18,6 +18,7 @@ import {
   Pencil
 } from "lucide-react";
 import { safeJsonFetch } from "@/lib/utils";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 // Interface correspondente ao modelo RfbCodigoReceita
 interface RfbCodigoReceita {
@@ -508,7 +509,7 @@ export default function CodigosReceitaPage() {
             >
               {isSaving ? (
                 <>
-                  <Loader2 size={14} className="animate-spin" />
+                  <LoadingSpinner size="xs" />
                   Salvando...
                 </>
               ) : (
@@ -618,7 +619,7 @@ export default function CodigosReceitaPage() {
                 <tr>
                   <td colSpan={5} className="px-lg py-20 text-center">
                     <div className="flex flex-col items-center gap-2">
-                      <Loader2 size={32} className="animate-spin text-primary opacity-40" />
+                      <LoadingSpinner size="md" />
                       <span className="text-xs text-secondary font-bold">Consultando banco de dados...</span>
                     </div>
                   </td>

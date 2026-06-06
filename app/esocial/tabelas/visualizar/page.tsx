@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { cn, safeJsonFetch } from "@/lib/utils";
 import { format } from "date-fns";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 const TABLES = [
   { id: "01", name: "Tabela 01", fullName: "Categorias de Trabalhadores - eSocial" },
@@ -144,7 +145,7 @@ export default function TablesViewPage() {
            {loading ? (
              <div className="h-full flex flex-col items-center justify-center gap-4 animate-fade-in">
                 <div className="relative">
-                   <Loader2 className="animate-spin text-primary" size={48} />
+                   <LoadingSpinner size="lg" />
                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-black">
                       {activeTable}
                    </div>

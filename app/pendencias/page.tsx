@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn, safeJsonFetch } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function PendenciasPage() {
   const { openRegisterTrabalhadorModal, openRegisterEmpresaModal } = useModals();
@@ -59,7 +60,7 @@ export default function PendenciasPage() {
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <Loader2 className="animate-spin text-primary" size={40} />
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
@@ -76,7 +77,7 @@ export default function PendenciasPage() {
           disabled={isProcessing}
           className="btn-primary flex items-center gap-2 text-[10px] bg-tertiary"
         >
-          {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+          {isProcessing ? <LoadingSpinner size="xs" /> : <RefreshCcw size={14} />}
           Reprocessar Tudo
         </button>
       </div>

@@ -35,7 +35,10 @@ export async function GET(req: Request) {
     }
 
     // 1. Build Single Source of Truth Audit Trail utilizing the FiscalEngine
-    const auditEntries = await FiscalEngine.buildAuditTrail(targetEmpresaId, ano, mes || undefined);
+    const [auditEntries, auditEntriesReinf] = await Promise.all([
+      FiscalEngine.buildAuditTrail(targetEmpresaId, ano, mes || undefined),
+      FiscalEngine.buildAuditTrailReinf(targetEmpresaId, ano, mes || undefined)
+    ]);
 
     // 2. Compute crBreakdown and infoIRBreakdown dynamically from the audit trail
     // This guarantees absolute consistency between raw listings and chart aggregations!
@@ -110,6 +113,34 @@ export async function GET(req: Request) {
       }
     });
 
+    // --- REINF R-4020: agrega ao mesmo crBreakdownMap ---
+    auditEntriesReinf.forEach((entry: AuditEntry) => {
+      if (entry.incluido === false || entry.ativoFiscal === false || entry.valorCompoeBase === false) {
+        return;
+      }
+
+      const cr = entry.cr || "---";
+      const existingCR = crBreakdownMap.get(cr) || {
+        crMen: cr,
+        _sum: {
+          vlrRendTrib: 0,
+          vlrRendTrib13: 0,
+          vlrPrevOficial: 0,
+          vlrPrevOficial13: 0,
+          vlrCRMen: 0,
+          vlrCR13Men: 0,
+        }
+      };
+
+      if (entry.fiscalNature === FiscalNature.REND_TRIBUTAVEL) {
+        existingCR._sum.vlrRendTrib += entry.valor;
+      } else if (entry.fiscalNature === FiscalNature.IRRF_RETIDO) {
+        existingCR._sum.vlrCRMen += entry.valor;
+      }
+
+      crBreakdownMap.set(cr, existingCR);
+    });
+
     const crBreakdown = Array.from(crBreakdownMap.values()).map(v => ({
       crMen: v.crMen,
       _sum: {
@@ -169,10 +200,28 @@ export async function GET(req: Request) {
       });
     }
 
+    // Mapa de descrições para uso direto no frontend (evita lookup por código no client)
+    const codigosEmUso = new Set<string>();
+    [...auditEntries, ...auditEntriesReinf].forEach(e => {
+      const cr = (e.cr || e.tpCR || "").replace(/\D/g, "").substring(0, 4);
+      if (/^\d{4}$/.test(cr)) codigosEmUso.add(cr);
+    });
+
+    const tabelaCodigos = await prisma.rfbCodigoReceita.findMany({
+      where: { codigo: { in: Array.from(codigosEmUso) } },
+      select: { codigo: true, denominacao: true }
+    });
+
+    const codigosReceita = Object.fromEntries(
+      tabelaCodigos.map(t => [t.codigo, t.denominacao])
+    );
+
     const responseData = {
       crBreakdown,
       infoIRBreakdown,
       auditEntries,
+      auditEntriesReinf,      // ← novo
+      codigosReceita,          // ← novo: { "0561": "Rendimentos do trabalho...", "1708": "..." }
       divergencias: fiscalWarnings,
       totals: totalsAnual._sum
     };

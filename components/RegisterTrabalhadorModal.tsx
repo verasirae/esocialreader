@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { UserPlus, Loader2, ChevronDown, Check, FileUp, Download, Edit3 } from "lucide-react";
+import { UserPlus, ChevronDown, Check, FileUp, Download, Edit3 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
 import * as XLSX from "xlsx";
+import LoadingSpinner from "./LoadingSpinner";
 
 export function RegisterTrabalhadorModal() {
   const { isRegisterTrabalhadorModalOpen, closeRegisterTrabalhadorModal, editingTrabalhador } = useModals();
@@ -174,7 +175,7 @@ export function RegisterTrabalhadorModal() {
                  />
                  <div className="w-full h-20 border-2 border-dashed border-primary/30 rounded-sm flex flex-col items-center justify-center gap-1 hover:bg-primary/10 transition-all">
                     {isImporting ? (
-                      <Loader2 size={24} className="animate-spin text-primary" />
+                      <LoadingSpinner size="sm" />
                     ) : (
                       <>
                         <FileUp size={24} className="text-primary opacity-60" />
@@ -255,7 +256,7 @@ export function RegisterTrabalhadorModal() {
               className="flex-1 bg-primary text-white py-3 rounded-sm text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
               disabled={isLoading}
             >
-              {isLoading ? <Loader2 size={16} className="animate-spin" /> : (editingTrabalhador ? <Check size={16} /> : <Check size={16} />)}
+              {isLoading ? <LoadingSpinner size="xs" /> : (editingTrabalhador ? <Check size={16} /> : <Check size={16} />)}
               <span>{editingTrabalhador ? "Salvar Alterações" : "Salvar Trabalhador"}</span>
             </button>
           </div>

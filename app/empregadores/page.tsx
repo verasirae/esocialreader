@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
 import { safeJsonFetch } from "@/lib/utils";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 export default function EmpregadoresPage() {
   const [empresasData, setEmpresasData] = useState<any[]>([]);
@@ -178,7 +179,7 @@ export default function EmpregadoresPage() {
             <tbody className="divide-y divide-outline-variant">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-lg py-20 text-center"><Loader2 size={32} className="animate-spin text-primary inline-block opacity-20" /></td>
+                  <td colSpan={6} className="px-lg py-20 text-center"><LoadingSpinner size="md" className="inline-block" /></td>
                 </tr>
               ) : empresasData.length === 0 ? (
                 <tr>
