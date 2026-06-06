@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: guard.motivo }, { status: 422 });
     }
 
-    // 3. Execução em read-only transaction com timeout
+    // 3. Execução com timeout
     const inicio = Date.now();
     let resultado: any[] = [];
     let status = "sucesso";
@@ -60,28 +60,26 @@ export async function POST(req: NextRequest) {
     try {
       resultado = await prisma.$transaction(
         async (tx) => {
-          // Garante read-only e timeout no nível do PostgreSQL
-          try {
-            await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
-          } catch (e) {
-            console.warn("Aviso: Não foi possível definir a transação como READ ONLY:", e);
-          }
-          
-          try {
-            await tx.$executeRawUnsafe(`SET statement_timeout = ${TIMEOUT_MS}`);
-          } catch (e) {
-            console.warn("Aviso: Não foi possível definir o statement_timeout:", e);
-          }
+          // Remove SET TRANSACTION READ ONLY — agora aceita qualquer statement
+          await tx.$executeRawUnsafe(`SET statement_timeout = ${TIMEOUT_MS}`);
 
-          const rows = (await tx.$queryRawUnsafe(cleanSql)) as any[];
+          // Detecta se é SELECT para retornar linhas, ou DDL/DML para retornar affected count
+          const isSelect = cleanSql.toUpperCase().startsWith("SELECT")
+            || cleanSql.toUpperCase().startsWith("WITH");
 
-          // Limita retorno sem abortar no banco para fins de UX
-          return rows.slice(0, MAX_ROWS);
+          if (isSelect) {
+            const rows = await tx.$queryRawUnsafe(cleanSql) as any[];
+            return rows.slice(0, MAX_ROWS);
+          } else {
+            // DDL/DML: executa e retorna count de linhas afetadas
+            const affected = await tx.$executeRawUnsafe(cleanSql);
+            return [{ resultado: "Executado com sucesso", linhas_afetadas: affected }];
+          }
         },
         { timeout: TIMEOUT_MS + 2000 }
       );
     } catch (err: any) {
-      console.error("Erro na execução da consulta:", err);
+      console.error("Erro na execução da instrução:", err);
       const msg = err.message || String(err);
       status = msg.toLowerCase().includes("timeout") ? "timeout" : "erro";
       mensagemErro = msg;

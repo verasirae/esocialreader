@@ -22,7 +22,8 @@ import {
   ShieldPlus,
   X,
   LogOut,
-  Database
+  Database,
+  Scale
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
@@ -39,6 +40,7 @@ const menuItems = [
   { icon: History, label: "Histórico de XML", href: "/history" },
   { icon: ShieldCheck, label: "Auditoria e Timeline", href: "/audit" },
   { icon: FileText, label: "DIRF Digital", href: "/reports" },
+  { icon: Scale, label: "Códigos de Receita", href: "/codigos-receita" },
 ];
 
 const footerItems = [

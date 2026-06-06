@@ -1253,3 +1253,29 @@ model ConsultaExecucao {
   @@map("consulta_execucao")
 }
 
+//////////////////////////////////////////////////////
+// TABELA: CÓDIGOS DE RECEITA RFB
+//////////////////////////////////////////////////////
+
+model RfbCodigoReceita {
+  id           String   @id @default(cuid())
+
+  codigo       String   @unique           // ex: "0561", "116201"
+  denominacao  String   @db.Text
+
+  // Array de bases legais (portarias, ADEs, INs)
+  baseLegal    String[] @map("base_legal")
+
+  dtCriacao    DateTime? @map("dt_criacao")  @db.Date
+  dtExtincao   DateTime? @map("dt_extincao") @db.Date
+
+  // Ativo = não possui dt_extincao ou dt_extincao está no futuro
+  ativo        Boolean  @default(true)
+
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([ativo])
+  @@map("rfb_codigo_receita")
+}
+
+

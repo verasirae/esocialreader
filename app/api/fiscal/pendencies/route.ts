@@ -64,8 +64,12 @@ export async function GET() {
       totalPendencies: unlinkedCpfs.length + unlinkedCnpjs.length + workerPendencies.length + empresaPendencies.length + processingErrors.length,
       stats: totalStats
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro ao buscar pendências:", error);
-    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+    return NextResponse.json({ 
+      error: "Erro interno", 
+      message: error.message || String(error),
+      stack: error.stack 
+    }, { status: 500 });
   }
 }

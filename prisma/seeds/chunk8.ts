@@ -1,0 +1,23 @@
+export const chunk8 = [
+  { codigo: "9043", denominacao: `CUSTAS JUDICIAIS - JUSTIÇA FEDERAL (DEMAIS RECURSOS COMPROVADOS PELA PGFN)`, baseLegal: ["ATO DECLARATÓRIO EXECUTIVO CODAC nº 15 de 21/03/2014"], dtCriacao: new Date("2014-03-24"), dtExtincao: null, ativo: true },
+  { codigo: "9057", denominacao: `CUSTAS JUDICIAIS - JUSTIÇA MILITAR DA UNIÃO (DE COMPETÊNCIA DA PGF)`, baseLegal: ["ATO DECLARATÓRIO EXECUTIVO CODAC nº 15 de 21/03/2014"], dtCriacao: new Date("2014-03-24"), dtExtincao: null, ativo: true },
+  { codigo: "9060", denominacao: `CUSTAS JUDICIAIS - JUSTIÇA MILITAR DA UNIÃO (DE OUTRAS SECRETARIAS)`, baseLegal: ["ATO DECLARATÓRIO EXECUTIVO CODAC nº 15 de 21/03/2014"], dtCriacao: new Date("2014-03-24"), dtExtincao: null, ativo: true },
+  { codigo: "9212", denominacao: `Multas por Descumprimento de Termos de Ajustamento de Conduta Previdenciários - TAC`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9354", denominacao: `Arrecadação de Fundo de Terras - Amortização Contratos do Banco de Desenvolvimento Cerrado`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9360", denominacao: `Pro-Agro - Recuperações de Créditos e Subsídios de Operações Ordinárias`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9373", denominacao: `Arrecadação sobre Bens Alienados por Destinação Autorizada - Ministério da Justiça`, baseLegal: ["ATO DECLARATÓRIO EXECUTIVO CODAC nº 89 de 01/11/2013"], dtCriacao: new Date("2013-11-05"), dtExtincao: null, ativo: true },
+  { codigo: "9385", denominacao: `IOF - Contrato de Transferências Regulatórias Externas - Lançado de Ofício`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9411", denominacao: `II - Imposto Importação - Petróleo e Derivados - Lançamento de Oficio`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9423", denominacao: `Decred - Omissão/Incorreção na Apresentação de Dados - Lançado de Ofício`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9430", denominacao: `Siscoserv - Multa por Omissão/Incorreção - Lançado de Ofício da PGF`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9453", denominacao: `DTA - Omissão/Incorreção na Apresentação de Declaração - Lançada de Ofício`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9467", denominacao: `Finsocial - Lançado de Oficio da PGFN`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9478", denominacao: `Restituição de Seguro Desemprego Recebido Indevidamente - outras Receitas`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9882", denominacao: `Restituição de Devolução de Convênios FNDE - Execuções Extraordinárias`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9892", denominacao: `Multas Previdenciárias por Descumprimento de Normas de eSocial - Lançadas de Ofício`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9895", denominacao: `Multa Ajustada pela Rede Arrecadadora de Receitas Previdenciárias - eSocial - Lançada de Ofício`, baseLegal: [], dtCriacao: null, dtExtincao: null, ativo: true },
+  { codigo: "9901", denominacao: `Devolução de Restituição Indevida - CSLL - Não Tributário`, baseLegal: ["ATO DECLARATÓRIO EXECUTIVO CODAC nº 95 de 01/12/2009", "ATO DECLARATÓRIO EXECUTIVO CODAC nº 25 de 21/03/2013", "ATO DECLARATÓRIO EXECUTIVO CODAC nº 9 de 29/03/2017"], dtCriacao: new Date("2009-12-03"), dtExtincao: null, ativo: true },
+  { codigo: "9914", denominacao: `Devolução de Restituição Indevida - PIS/Pasep - Não Tributário`, baseLegal: ["ATO DECLARATÓRIO EXECUTIVO CODAC nº 95 de 01/12/2009", "ATO DECLARATÓRIO EXECUTIVO CODAC nº 25 de 21/03/2013", "ATO DECLARATÓRIO EXECUTIVO CODAC nº 9 de 29/03/2017"], dtCriacao: new Date("2009-12-03"), dtExtincao: null, ativo: true },
+  { codigo: "9942", denominacao: `Devolução de Restituição Indevida - Cofins - Não Tributário`, baseLegal: ["ATO DECLARATÓRIO EXECUTIVO CODAC nº 95 de 01/12/2009", "ATO DECLARATÓRIO EXECUTIVO CODAC nº 25 de 21/03/2013", "ATO DECLARATÓRIO EXECUTIVO CODAC nº 9 de 29/03/2017"], dtCriacao: new Date("2009-12-03"), dtExtincao: null, ativo: true },
+  { codigo: "9991", denominacao: `Devolução de Restituição Indevida - IPI - Não Tributário`, baseLegal: ["ATO DECLARATÓRIO EXECUTIVO CODAC nº 95 de 01/12/2009", "ATO DECLARATÓRIO EXECUTIVO CODAC nº 25 de 21/03/2013", "ATO DECLARATÓRIO EXECUTIVO CODAC nº 9 de 29/03/2017"], dtCriacao: new Date("2009-12-03"), dtExtincao: null, ativo: true }
+];
