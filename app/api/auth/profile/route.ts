@@ -104,7 +104,7 @@ export async function PUT(req: NextRequest) {
       id: updatedUser.id,
       email: updatedUser.email,
       nome: updatedUser.nome,
-      perfil: updatedUser.perfil as "superAdmin" | "Admin" | "user",
+      perfil: updatedUser.perfil as any,
     };
 
     await setSessionCookie(updatedSession);

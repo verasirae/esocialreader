@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/auth-server";
 export async function GET(req: NextRequest) {
   try {
     const sessionUser = await getCurrentUser();
-    if (!sessionUser || sessionUser.perfil !== "superAdmin") {
+    if (!sessionUser || (sessionUser.perfil !== "SUPER_ADMIN" && sessionUser.perfil !== "superAdmin")) {
       return NextResponse.json(
         { error: "Acesso não autorizado." },
         { status: 401 }
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const sessionUser = await getCurrentUser();
-    if (!sessionUser || sessionUser.perfil !== "superAdmin") {
+    if (!sessionUser || (sessionUser.perfil !== "SUPER_ADMIN" && sessionUser.perfil !== "superAdmin")) {
       return NextResponse.json(
         { error: "Acesso não autorizado." },
         { status: 401 }

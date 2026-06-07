@@ -1183,14 +1183,16 @@ model ReinfDivergencia {
 //////////////////////////////////////////////////////
 
 model Usuario {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  nome      String
-  senha     String   // Senha padrão ou customizada
-  perfil    String   // superAdmin, Admin, user
-  ativo     Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(cuid())
+  email             String   @unique
+  nome              String
+  senha             String   // Senha padrão ou customizada
+  perfil            String   // superAdmin, Admin, user
+  ativo             Boolean  @default(true)
+  bloqueadoGerais   Boolean  @default(false)
+  modulosBloqueados String   @default("")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("usuario")
 }
@@ -1276,6 +1278,44 @@ model RfbCodigoReceita {
 
   @@index([ativo])
   @@map("rfb_codigo_receita")
+}
+
+//////////////////////////////////////////////////////
+// GOVERNANÇA: PERFIS, PERMISSÕES E CONFIGURAÇÕES
+//////////////////////////////////////////////////////
+
+model PerfilPermissao {
+  id          String   @id @default(cuid())
+  nomePerfil  String   @unique @map("nome_perfil") // ex: "GESTOR", "ANALISTA", "OPERADOR", "CLIENTE"
+  descricao   String?
+  permissoes  Json     // ex: { "importarXml": true, "reprocessarEventos": false, ... }
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("perfil_permissao")
+}
+
+model GovernancaLog {
+  id          String   @id @default(cuid())
+  usuarioId   String   @map("usuario_id")
+  usuarioNome String   @map("usuario_nome")
+  perfil      String
+  acao        String   // ex: "IMPERSONATION", "UPDATE_PERMISSIONS", "REPROCESS_XML", "LICENSING_CHANGE"
+  descricao   String   @db.Text
+  detalhes    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("governanca_log")
+}
+
+model ConfigGlobal {
+  id          String   @id @default(cuid())
+  chave       String   @unique // ex: "LICENCIAMENTO_TIPO", "CONSUMO_MAX", "FILAS_ATIVAS"
+  valor       String   @db.Text
+  descricao   String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("config_global")
 }
 
 

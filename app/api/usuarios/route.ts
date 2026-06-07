@@ -6,7 +6,12 @@ import { getCurrentUser, hashPassword } from "@/lib/auth-server";
 async function checkAdminPermission() {
   const currentUser = await getCurrentUser();
   if (!currentUser) return null;
-  if (currentUser.perfil === "superAdmin" || currentUser.perfil === "Admin") {
+  if (
+    currentUser.perfil === "SUPER_ADMIN" ||
+    currentUser.perfil === "ADMIN" ||
+    currentUser.perfil === "superAdmin" ||
+    currentUser.perfil === "Admin"
+  ) {
     return currentUser;
   }
   return null;
@@ -30,6 +35,8 @@ export async function GET(req: NextRequest) {
         nome: true,
         perfil: true,
         ativo: true,
+        bloqueadoGerais: true,
+        modulosBloqueados: true,
         createdAt: true,
       },
       orderBy: { createdAt: "desc" },
@@ -55,7 +62,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, nome, perfil } = await req.json();
+    const { email, nome, perfil, bloqueadoGeraisState, modulosBloqueadosState } = await req.json();
 
     if (!email || !nome || !perfil) {
       return NextResponse.json(
@@ -78,8 +85,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Role hierarchies protection: Admin cannot create a superAdmin
-    if (adminUser.perfil === "Admin" && perfil === "superAdmin") {
+    // Role hierarchies protection: Admin cannot create a superAdmin / SUPER_ADMIN
+    const isAdmin = adminUser.perfil === "ADMIN" || adminUser.perfil === "Admin";
+    const isTargetSuper = perfil === "SUPER_ADMIN" || perfil === "superAdmin";
+    if (isAdmin && isTargetSuper) {
       return NextResponse.json(
         { error: "Um Administrador não pode cadastrar um usuário com perfil SuperAdmin." },
         { status: 403 }
@@ -96,6 +105,8 @@ export async function POST(req: NextRequest) {
         senha: defaultPasswordHashed,
         perfil,
         ativo: true,
+        bloqueadoGerais: !!bloqueadoGeraisState,
+        modulosBloqueados: modulosBloqueadosState || "",
       },
       select: {
         id: true,
@@ -103,9 +114,27 @@ export async function POST(req: NextRequest) {
         nome: true,
         perfil: true,
         ativo: true,
+        bloqueadoGerais: true,
+        modulosBloqueados: true,
         createdAt: true,
       },
     });
+
+    // Logging action for full traceability
+    try {
+      await prisma.governancaLog.create({
+        data: {
+          usuarioId: adminUser.id,
+          usuarioNome: adminUser.nome,
+          perfil: adminUser.perfil,
+          acao: "USER_CREATE",
+          descricao: `Criou novo usuário: ${nome} (${cleanEmail}) com perfil ${perfil}`,
+          detalhes: { targetUserId: newUser.id, email: cleanEmail, perfil }
+        }
+      });
+    } catch (logErr) {
+      console.error("Erro ao registrar log de criação de usuário:", logErr);
+    }
 
     return NextResponse.json(newUser, { status: 201 });
   } catch (error) {

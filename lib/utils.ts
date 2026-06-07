@@ -18,12 +18,12 @@ export async function fetchWithRetry(
   try {
     const response = await fetch(url, options);
     
-    // Trata erros transitórios comuns com retry
-    if (!response.ok && [404, 502, 503, 504].includes(response.status) && retries > 0) {
-      // Se for 404 e for uma rota de API que EU sei que deveria existir, pode ser que o next esteja carregando
-      console.warn(`URL ${url} retornou ${response.status}, retentando em ${backoff}ms... (${retries} restantes)`);
-      await new Promise(resolve => setTimeout(resolve, backoff));
-      return fetchWithRetry(url, options, retries - 1, backoff * 1.5);
+    // Trata erros transitórios comuns com retry (incluindo 429 Rate Limit)
+    if (!response.ok && [404, 429, 502, 503, 504].includes(response.status) && retries > 0) {
+      const waitTime = response.status === 429 ? Math.max(backoff, 2000) : backoff;
+      console.warn(`URL ${url} retornou ${response.status}, retentando em ${waitTime}ms... (${retries} restantes)`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      return fetchWithRetry(url, options, retries - 1, response.status === 429 ? waitTime * 2 : backoff * 1.5);
     }
     
     return response;
@@ -92,4 +92,69 @@ export async function safeJsonFetch<T = any>(url: string, options?: RequestInit)
     if (error.stack) console.debug(error.stack);
     return null;
   }
+}
+
+export function isPathBlocked(
+  pathname: string,
+  user: any
+): { blocked: boolean; type: "individual" | "geral" | null; moduleLabel: string } {
+  if (!user) return { blocked: false, type: null, moduleLabel: "" };
+  
+  const userPerfil = (user.perfil || "").toUpperCase();
+  if (userPerfil === "SUPER_ADMIN" || userPerfil === "SUPERADMIN") {
+    return { blocked: false, type: null, moduleLabel: "" };
+  }
+
+  const normalPath = pathname.toLowerCase();
+
+  // 1. Check general modules block
+  const generalMapping: Record<string, string> = {
+    "/codigos-receita": "Códigos de Receita",
+    "/pendencias": "Pendências",
+    "/history": "Histórico de XML",
+    "/audit": "Auditoria e Timeline",
+    "/reports": "DIRF Digital",
+    "/consultas": "Consultas Especiais"
+  };
+
+  const activeGeneralPath = Object.keys(generalMapping).find((p) =>
+    normalPath.startsWith(p)
+  );
+
+  if (activeGeneralPath && user.bloqueadoGerais) {
+    return {
+      blocked: true,
+      type: "geral",
+      moduleLabel: generalMapping[activeGeneralPath] || "Módulos Gerais",
+    };
+  }
+
+  // 2. Check individual modules block
+  const individualMapping: Record<string, { id: string; label: string }> = {
+    "/esocial": { id: "esocial", label: "eSocial (S-5002)" },
+    "/reinf": { id: "reinf", label: "EFD-REINF" },
+    "/empregadores": { id: "empregadores", label: "Gestão de Empregadores" },
+    "/trabalhadores": { id: "trabalhadores", label: "Cadastro de Trabalhadores" },
+    "/operadoras": { id: "operadoras", label: "Operadoras de Saúde" },
+    "/consolidacao": { id: "consolidacao", label: "Consolidação Fiscal" },
+  };
+
+  const activeIndividualPath = Object.keys(individualMapping).find((p) =>
+    normalPath.startsWith(p)
+  );
+
+  if (activeIndividualPath) {
+    const { id, label } = individualMapping[activeIndividualPath];
+    const blockedList = (user.modulosBloqueados || "")
+      .toLowerCase()
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+
+    if (blockedList.includes(id)) {
+      return { blocked: true, type: "individual", moduleLabel: label };
+    }
+  }
+
+  return { blocked: false, type: null, moduleLabel: "" };
 }

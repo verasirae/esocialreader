@@ -18,9 +18,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (sessionUser.perfil !== "superAdmin") {
+    if (sessionUser.perfil !== "SUPER_ADMIN" && sessionUser.perfil !== "superAdmin") {
       return NextResponse.json(
-        { error: "Acesso negado. Apenas usuários com perfil superAdmin podem realizar consultas especiais." },
+        { error: "Acesso negado. Apenas usuários com perfil SUPER_ADMIN podem realizar consultas especiais." },
         { status: 401 } // Usamos 401 para evitar interceptações de 403 pelo proxy nginx
       );
     }

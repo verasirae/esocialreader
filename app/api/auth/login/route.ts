@@ -23,14 +23,14 @@ export async function POST(req: NextRequest) {
           email: "admin@compliance.com",
           nome: "Admin Compliance",
           senha: hashPassword("senha123"),
-          perfil: "superAdmin",
+          perfil: "SUPER_ADMIN",
           ativo: true,
         },
       });
     }
 
     // 2. Fetch user
-    const user = await prisma.usuario.findUnique({
+    let user = await prisma.usuario.findUnique({
       where: { email: cleanEmail },
     });
 
@@ -39,6 +39,18 @@ export async function POST(req: NextRequest) {
         { error: "Credenciais inválidas" },
         { status: 401 }
       );
+    }
+
+    // Automatically migrate legacy profiles to the new ones
+    if (user.perfil === "superAdmin" || user.perfil === "Admin" || user.perfil === "user") {
+      let newPerfil = "OPERADOR";
+      if (user.perfil === "superAdmin") newPerfil = "SUPER_ADMIN";
+      else if (user.perfil === "Admin") newPerfil = "ADMIN";
+      
+      user = await prisma.usuario.update({
+        where: { id: user.id },
+        data: { perfil: newPerfil },
+      });
     }
 
     if (!user.ativo) {
@@ -62,7 +74,7 @@ export async function POST(req: NextRequest) {
       id: user.id,
       email: user.email,
       nome: user.nome,
-      perfil: user.perfil as "superAdmin" | "Admin" | "user",
+      perfil: user.perfil as any,
     };
 
     await setSessionCookie(sessionUser);

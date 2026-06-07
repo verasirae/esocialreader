@@ -15,11 +15,15 @@ import {
   Info,
   Clock,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  Download,
+  X
 } from "lucide-react";
 import { cn, safeJsonFetch } from "@/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { gerarInformePDF } from "@/lib/pdf-generator";
 
 export default function ConsolidacaoFiscalPage() {
   return (
@@ -370,6 +374,8 @@ function DetailedConsolidationView({
   onBack 
 }: any) {
   const [isTabLoading, setIsTabLoading] = useState(false);
+  const [selectedFechamento, setSelectedFechamento] = useState<any>(null);
+  const [showInformeModal, setShowInformeModal] = useState(false);
 
   useEffect(() => {
     setIsTabLoading(true);
@@ -474,6 +480,131 @@ function DetailedConsolidationView({
     
     return list;
   }, [yearData, selectedYear, rendimentosData]);
+
+  const handleDownloadInforme = (f: any) => {
+    if (!f) return;
+    try {
+      const doc = gerarInformePDF(f);
+      const nameClean = f.trabalhador?.nome?.toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "-") || "beneficiario";
+      doc.save(`informe-rendimentos-${nameClean}-${f.ano}.pdf`);
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      alert("Ocorreu um erro ao gerar o PDF do comprovante de rendimentos.");
+    }
+  };
+
+  const renderInformeModal = () => {
+    if (!selectedFechamento) return null;
+    const f = selectedFechamento;
+
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-on-surface/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-sm shadow-2xl flex flex-col"
+        >
+          <div className="p-8 border-b border-outline-variant flex justify-between items-start bg-surface/30">
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Comprovante de Rendimentos Pagos e de Retenção de Imposto de Renda na Fonte</span>
+              <h3 className="text-xl font-extrabold text-on-surface">Ano-calendário de {f.ano}</h3>
+            </div>
+            <button onClick={() => setShowInformeModal(false)} className="p-2 hover:bg-surface-variant rounded-full transition-all">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="p-8 space-y-8">
+            {/* Quadrante 1: Fonte Pagadora */}
+            <section className="space-y-4">
+              <h4 className="text-[11px] font-black text-secondary uppercase tracking-widest border-b border-outline-variant pb-2">01. Fonte Pagadora (Pessoa Jurídica)</h4>
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-[10px] text-secondary font-bold uppercase mb-1">CNPJ</p>
+                  <p className="text-sm font-black text-on-surface">{f.empresa.cnpjRaiz}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] text-secondary font-bold uppercase mb-1">Nome Empresarial</p>
+                  <p className="text-sm font-black text-on-surface">{f.empresa.razaoSocial}</p>
+                </div>
+              </div>
+            </section>
+
+            {/* Quadrante 2: Pessoa Física Beneficiária */}
+            <section className="space-y-4">
+              <h4 className="text-[11px] font-black text-secondary uppercase tracking-widest border-b border-outline-variant pb-2">02. Pessoa Física Beneficiária dos Rendimentos</h4>
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-[10px] text-secondary font-bold uppercase mb-1">CPF</p>
+                  <p className="text-sm font-black text-on-surface">{f.trabalhador.cpf}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] text-secondary font-bold uppercase mb-1">Nome Completo</p>
+                  <p className="text-sm font-black text-on-surface">{f.trabalhador.nome}</p>
+                </div>
+              </div>
+            </section>
+
+            {/* Quadrante 3: Rendimentos Tributáveis */}
+            <section className="space-y-4">
+              <h4 className="text-[11px] font-black text-secondary uppercase tracking-widest border-b border-outline-variant pb-2">03. Rendimentos Tributáveis, Deduções e Imposto Retido na Fonte</h4>
+              <div className="space-y-2 border border-outline-variant rounded-sm overflow-hidden">
+                <div className="flex justify-between p-3 bg-surface/50 border-b border-outline-variant italic">
+                  <span className="text-xs font-bold">Natureza do Rendimento</span>
+                  <span className="text-xs font-black">Valores em Reais (R$)</span>
+                </div>
+                {[
+                  { label: "Total de Rendimentos (inclusive férias)", val: f.totalRendTrib },
+                  { label: "Contribuição Previdenciária Oficial", val: f.totalPrevOficial },
+                  { label: "Pensão Alimentícia", val: f.totalPensao },
+                  { label: "Imposto sobre a Renda Retido na Fonte", val: f.totalIrrf },
+                ].map((item, i) => (
+                  <div key={i} className="flex justify-between p-3 border-b border-outline-variant last:border-0 hover:bg-surface/20 transition-all">
+                    <span className="text-xs font-medium text-secondary">{item.label}</span>
+                    <span className="text-xs font-black text-on-surface">R$ {Number(item.val).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+             {/* Quadrante 4: Rendimentos Isentos */}
+             <section className="space-y-4">
+              <h4 className="text-[11px] font-black text-secondary uppercase tracking-widest border-b border-outline-variant pb-2">04. Rendimentos Isentos e Não Tributáveis</h4>
+              <div className="space-y-2 border border-outline-variant rounded-sm overflow-hidden">
+                <div className="flex justify-between p-3 border-b border-outline-variant hover:bg-surface/20 transition-all">
+                  <span className="text-xs font-medium text-secondary">Indenizações por rescisão de contrato de trabalho</span>
+                  <span className="text-xs font-black text-on-surface">R$ {Number(f.totalIndenizacaoRescisao).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between p-3 hover:bg-surface/20 transition-all">
+                  <span className="text-xs font-medium text-secondary">Outros Rendimentos Isentos</span>
+                  <span className="text-xs font-black text-on-surface">R$ {(Number(f.totalRendIsentos) - Number(f.totalIndenizacaoRescisao)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div className="p-8 border-t border-outline-variant bg-surface/30 flex justify-between gap-4">
+            <p className="text-[10px] text-secondary font-medium leading-relaxed italic max-w-sm">
+              * Este documento foi gerado automaticamente através da consolidação dos eventos S-5002 transmitidos ao eSocial.
+            </p>
+            <div className="flex gap-4">
+              <button 
+                onClick={() => handleDownloadInforme(f)}
+                className="btn-outline flex items-center gap-2 py-2.5 px-6 bg-white"
+              >
+                <Download size={14} />
+                <span>Baixar PDF</span>
+              </button>
+              <button onClick={() => setShowInformeModal(false)} className="btn-primary py-2.5 px-8">Fechar</button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  };
 
   return (
     <motion.div 
@@ -671,6 +802,52 @@ function DetailedConsolidationView({
                   isLoading={isLoadingTrabalhadores} 
                   selectedYear={selectedYear} 
                   selectedMonth={selectedMonth} 
+                  onViewInforme={(item: any, idx: number) => {
+                    setSelectedFechamento({
+                      id: item.id || `fechamento-${item.trabalhadorId || item.trabalhador?.id || idx}-${selectedYear}`,
+                      ano: Number(selectedYear),
+                      empresa: {
+                        cnpjRaiz: empresa?.cnpjRaiz || empresa?.cnpj || "00.000.000/0001-00",
+                        razaoSocial: empresa?.razaoSocial || "Empresa"
+                      },
+                      trabalhador: {
+                        nome: item.trabalhador?.nome || "Beneficiário",
+                        cpf: item.trabalhador?.cpf || item.eventoOrigem?.cpfBenef || "000.000.000-00"
+                      },
+                      totalRendTrib: Number(item.vlrRendTrib || 0),
+                      totalPrevOficial: Number(item.vlrPrevOficial || 0),
+                      totalPensao: Number(item.vlrPensao || 0),
+                      totalIrrf: Number(item.vlrIrrf || 0),
+                      totalPlanoSaude: Number(item.vlrPlanoSaude || 0),
+                      totalRendTrib13: Number(item.vlrRendTrib13 || 0),
+                      totalIndenizacaoRescisao: 0,
+                      totalRendIsentos: 0
+                    });
+                    setShowInformeModal(true);
+                  }}
+                  onDownloadInforme={(item: any, idx: number) => {
+                    const f = {
+                      id: item.id || `fechamento-${item.trabalhadorId || item.trabalhador?.id || idx}-${selectedYear}`,
+                      ano: Number(selectedYear),
+                      empresa: {
+                        cnpjRaiz: empresa?.cnpjRaiz || empresa?.cnpj || "00.000.000/0001-00",
+                        razaoSocial: empresa?.razaoSocial || "Empresa"
+                      },
+                      trabalhador: {
+                        nome: item.trabalhador?.nome || "Beneficiário",
+                        cpf: item.trabalhador?.cpf || item.eventoOrigem?.cpfBenef || "000.000.000-00"
+                      },
+                      totalRendTrib: Number(item.vlrRendTrib || 0),
+                      totalPrevOficial: Number(item.vlrPrevOficial || 0),
+                      totalPensao: Number(item.vlrPensao || 0),
+                      totalIrrf: Number(item.vlrIrrf || 0),
+                      totalPlanoSaude: Number(item.vlrPlanoSaude || 0),
+                      totalRendTrib13: Number(item.vlrRendTrib13 || 0),
+                      totalIndenizacaoRescisao: 0,
+                      totalRendIsentos: 0
+                    };
+                    handleDownloadInforme(f);
+                  }}
                 />
               ) : activeTab === "Compensação judicial" ? (
                 !isCompensacaoDetailed ? (
@@ -754,6 +931,8 @@ function DetailedConsolidationView({
           </div>
         </div>
       </div>
+
+      {showInformeModal && renderInformeModal()}
     </motion.div>
   );
 }
@@ -2167,7 +2346,7 @@ function PlanoSaudeTab({ data, isLoading }: any) {
   );
 }
 
-function TrabalhadoresTab({ data, isLoading, selectedYear, selectedMonth }: any) {
+function TrabalhadoresTab({ data, isLoading, selectedYear, selectedMonth, onViewInforme, onDownloadInforme }: any) {
   const format = (v: any) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   
   if (isLoading) {
@@ -2206,6 +2385,7 @@ function TrabalhadoresTab({ data, isLoading, selectedYear, selectedMonth }: any)
               <th className="py-3 px-4 text-right w-[120px]">Pensão Alim.</th>
               <th className="py-3 px-4 text-right w-[120px]">Plano Saúde</th>
               <th className="py-3 px-6 text-right w-[140px]">IRRF Retido</th>
+              <th className="py-3 px-6 text-right w-[130px]">Ações</th>
             </tr>
           </thead>
           <tbody className="text-[11px]">
@@ -2278,6 +2458,24 @@ function TrabalhadoresTab({ data, isLoading, selectedYear, selectedMonth }: any)
                     <td className="py-3 px-4 text-right font-mono text-on-surface">{Number(item.vlrPensao || 0) > 0 ? format(item.vlrPensao) : "---"}</td>
                     <td className="py-3 px-4 text-right font-mono text-on-surface">{format(vlrPlanoSaudeTitular)}</td>
                     <td className="py-3 px-6 text-right font-mono font-bold text-primary">{format(item.vlrIrrf)}</td>
+                    <td className="py-3 px-6 text-right">
+                      <div className="flex justify-end gap-1.5">
+                        <button 
+                          onClick={() => onViewInforme && onViewInforme(item, idx)}
+                          title="Visualizar Comprovante de Rendimentos"
+                          className="p-1.5 bg-surface hover:bg-white border border-outline-variant rounded transition-all shadow-sm flex items-center justify-center"
+                        >
+                          <Eye size={12} className="text-primary" />
+                        </button>
+                        <button 
+                          onClick={() => onDownloadInforme && onDownloadInforme(item, idx)}
+                          title="Baixar PDF do Informe de Rendimentos"
+                          className="p-1.5 bg-surface hover:bg-white border border-outline-variant rounded transition-all shadow-sm flex items-center justify-center"
+                        >
+                          <Download size={12} className="text-secondary" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
 
                   {/* Linhas dos Dependentes */}
@@ -2296,6 +2494,7 @@ function TrabalhadoresTab({ data, isLoading, selectedYear, selectedMonth }: any)
                       <td className="py-2 px-4 text-right font-mono text-on-surface font-semibold">{format(dep.dedDep)}</td>
                       <td className="py-2 px-4 text-right font-mono text-on-surface font-semibold">{format(dep.pensao)}</td>
                       <td className="py-2 px-4 text-right font-mono text-on-surface font-semibold">{format(dep.planoSaude)}</td>
+                      <td className="py-2 px-6 text-right font-mono text-secondary/30">---</td>
                       <td className="py-2 px-6 text-right font-mono text-secondary/30">---</td>
                     </tr>
                   ))}

@@ -24,6 +24,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (resp.ok) {
         const data = await resp.json();
         setUser(data.user);
+      } else if (resp.status === 403) {
+        setUser(null);
       }
     } catch (e) {
       console.error("Erro ao carregar sessão:", e);

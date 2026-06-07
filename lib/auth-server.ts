@@ -5,7 +5,13 @@ export interface SessionUser {
   id: string;
   email: string;
   nome: string;
-  perfil: "superAdmin" | "Admin" | "user";
+  perfil: "SUPER_ADMIN" | "ADMIN" | "GESTOR" | "ANALISTA" | "OPERADOR" | "CLIENTE" | "superAdmin" | "Admin" | "user";
+  impersonator?: {
+    id: string;
+    nome: string;
+    email: string;
+    perfil: string;
+  };
 }
 
 const SESSION_COOKIE_NAME = "compliance_session";
@@ -62,6 +68,7 @@ export function decryptSession(sessionStr: string): SessionUser | null {
       email: data.email,
       nome: data.nome,
       perfil: data.perfil,
+      impersonator: data.impersonator,
     };
   } catch (error) {
     console.error("Failed to decrypt session:", error);

@@ -10,7 +10,7 @@ export async function GET(
 ) {
   try {
     const sessionUser = await getCurrentUser();
-    if (!sessionUser || sessionUser.perfil !== "superAdmin") {
+    if (!sessionUser || (sessionUser.perfil !== "SUPER_ADMIN" && sessionUser.perfil !== "superAdmin")) {
       return NextResponse.json(
         { error: "Acesso não autorizado." },
         { status: 401 }
@@ -47,7 +47,7 @@ export async function PUT(
 ) {
   try {
     const sessionUser = await getCurrentUser();
-    if (!sessionUser || sessionUser.perfil !== "superAdmin") {
+    if (!sessionUser || (sessionUser.perfil !== "SUPER_ADMIN" && sessionUser.perfil !== "superAdmin")) {
       return NextResponse.json(
         { error: "Acesso não autorizado." },
         { status: 401 }
@@ -99,7 +99,7 @@ export async function DELETE(
 ) {
   try {
     const sessionUser = await getCurrentUser();
-    if (!sessionUser || sessionUser.perfil !== "superAdmin") {
+    if (!sessionUser || (sessionUser.perfil !== "SUPER_ADMIN" && sessionUser.perfil !== "superAdmin")) {
       return NextResponse.json(
         { error: "Acesso não autorizado." },
         { status: 401 }

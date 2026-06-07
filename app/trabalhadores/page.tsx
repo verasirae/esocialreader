@@ -9,11 +9,13 @@ import {
   Users, 
   Loader2,
   FileText,
-  ChevronDown
+  ChevronDown,
+  Download
 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
 import { safeJsonFetch } from "@/lib/utils";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { gerarInformePDF } from "@/lib/pdf-generator";
 
 export default function TrabalhadoresPage() {
   const [trabalhadoresData, setTrabalhadoresData] = useState<any[]>([]);
@@ -26,10 +28,27 @@ export default function TrabalhadoresPage() {
 
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [selectedRowDetail, setSelectedRowDetail] = useState<any>(null);
+  const [fechamentosList, setFechamentosList] = useState<any[]>([]);
 
   useEffect(() => {
     fetchTrabalhadoresData(currentPage, searchTerm);
   }, [currentPage, searchTerm]);
+
+  useEffect(() => {
+    // Buscar consolidacoes/fechamentos para renderizar opcao de baixar informe de rendimentos
+    const fetchFechamentos = async () => {
+      try {
+        const res = await fetch("/api/esocial/s5002/fechamentos/list");
+        if (res.ok) {
+          const data = await res.json();
+          setFechamentosList(data);
+        }
+      } catch (err) {
+        console.error("Erro ao buscar fechamentos do eSocial:", err);
+      }
+    };
+    fetchFechamentos();
+  }, []);
 
   useEffect(() => {
     const handleRefresh = () => fetchTrabalhadoresData(1, "");
@@ -60,6 +79,8 @@ export default function TrabalhadoresPage() {
   const renderDataModal = () => {
     if (!isDataModalOpen || !selectedRowDetail) return null;
 
+    const f = fechamentosList.find((c: any) => c.trabalhador?.cpf === selectedRowDetail.cpf);
+
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
         <div className="bg-white w-full max-w-2xl rounded-sm shadow-2xl flex flex-col max-h-[80vh] overflow-hidden border border-outline-variant">
@@ -84,7 +105,7 @@ export default function TrabalhadoresPage() {
           <div className="flex-1 overflow-y-auto p-8 space-y-6">
             <div className="grid grid-cols-2 gap-x-8 gap-y-6">
               {Object.entries(selectedRowDetail).map(([key, value]) => {
-                if (key === "id" || key === "_count" || key === "eventos") return null;
+                if (key === "id" || key === "_count" || key === "eventos" || key === "fechamentos") return null;
                 const displayValue = value instanceof Date ? value.toLocaleDateString() : 
                                      (typeof value === "string" && !isNaN(Date.parse(value)) && value.includes("-")) ? new Date(value as string).toLocaleDateString() :
                                      String(value || "-");
@@ -106,6 +127,27 @@ export default function TrabalhadoresPage() {
             >
               Fechar Detalhamento
             </button>
+            {f && (
+              <button 
+                className="btn-outline px-6 bg-white border-secondary/20 text-secondary hover:bg-secondary/5 flex items-center justify-center gap-2 font-bold animate-in fade-in duration-300"
+                onClick={() => {
+                  try {
+                    const doc = gerarInformePDF(f);
+                    const nameClean = f.trabalhador?.nome?.toLowerCase()
+                      .normalize("NFD")
+                      .replace(/[\u0300-\u036f]/g, "")
+                      .replace(/\s+/g, "-") || "beneficiario";
+                    doc.save(`informe-rendimentos-${nameClean}-${f.ano || 2026}.pdf`);
+                  } catch (error) {
+                    console.error("Erro ao gerar PDF:", error);
+                    alert("Ocorreu um erro ao gerar o PDF.");
+                  }
+                }}
+              >
+                <Download size={14} className="text-secondary" />
+                Informe ({f.ano})
+              </button>
+            )}
             <button 
               className="btn-outline px-6 bg-white border-primary/20 text-primary hover:bg-primary/5 flex items-center justify-center gap-2"
               onClick={() => {

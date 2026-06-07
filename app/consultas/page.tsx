@@ -175,7 +175,7 @@ export default function ConsultasEspeciaisPage() {
   };
 
   useEffect(() => {
-    if (user?.perfil === "superAdmin") {
+    if (user?.perfil === "SUPER_ADMIN" || user?.perfil === "superAdmin") {
       fetchCatalog();
     }
   }, [catalogSearch, user]);
@@ -215,7 +215,7 @@ export default function ConsultasEspeciaisPage() {
   };
 
   // Safe checks for SuperAdmin
-  if (!user || user.perfil !== "superAdmin") {
+  if (!user || (user.perfil !== "SUPER_ADMIN" && user.perfil !== "superAdmin")) {
     return (
       <div id="unauthorized-container" className="max-w-xl mx-auto my-12 bg-white rounded-sm border border-outline-variant p-10 text-center shadow-lg">
         <div className="mx-auto w-16 h-16 rounded-sm bg-error/5 flex items-center justify-center text-error mb-6">
@@ -223,7 +223,7 @@ export default function ConsultasEspeciaisPage() {
         </div>
         <h1 className="text-xl font-black text-[#1B365D] uppercase tracking-wide mb-3">Acesso Restrito</h1>
         <p className="text-sm text-secondary leading-relaxed mb-6">
-          O <strong>Módulo de Consultas Especiais SQL</strong> está disponível em regime de auditoria restrita exclusivamente à liderança técnica e usuários corporativos com perfil <strong>SuperAdmin</strong>.
+          O <strong>Módulo de Consultas Especiais SQL</strong> está disponível em regime de auditoria restrita exclusivamente à liderança técnica e usuários corporativos com perfil <strong>SUPER_ADMIN</strong>.
         </p>
         <div className="p-4 bg-surface-container-low rounded-sm text-left border border-outline-variant mb-6 text-xs text-secondary space-y-2">
           <div className="flex items-center gap-2 text-primary font-bold">
@@ -618,22 +618,23 @@ export default function ConsultasEspeciaisPage() {
         </div>
       ) : (
         /* Core workspace split */
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Query catalog sidebar */}
-          <div className="lg:col-span-1 bg-white border border-outline-variant p-5 rounded-sm shadow-sm flex flex-col h-[calc(100vh-180px)] min-h-[500px]">
-            <div className="relative mb-4">
-              <Search className="absolute left-3.5 top-3 text-secondary" size={16} />
-              <input
-                type="text"
-                placeholder="Pesquisar consultas..."
-                value={catalogSearch}
-                onChange={(e) => setCatalogSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 rounded-sm text-xs bg-surface-container-low placeholder-secondary border border-outline-variant focus:outline-none focus:border-secondary transition-colors"
-                id="search-queries"
-              />
-            </div>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
+            {/* Query catalog sidebar */}
+            <div className="lg:col-span-1 bg-white border border-outline-variant p-5 rounded-sm shadow-sm flex flex-col min-h-[400px] lg:min-h-0 lg:h-full overflow-hidden">
+              <div className="relative mb-4">
+                <Search className="absolute left-3.5 top-3 text-secondary" size={16} />
+                <input
+                  type="text"
+                  placeholder="Pesquisar consultas..."
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-sm text-xs bg-surface-container-low placeholder-secondary border border-outline-variant focus:outline-none focus:border-secondary transition-colors"
+                  id="search-queries"
+                />
+              </div>
 
-            <div className="flex-1 overflow-y-auto space-y-4">
+              <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
               {/* Starred Queries */}
               <div>
                 <h3 className="text-[10px] font-black text-secondary uppercase tracking-[0.1em] mb-2 px-1">Favoritas ⭐</h3>
@@ -742,10 +743,8 @@ export default function ConsultasEspeciaisPage() {
             </div>
           </div>
 
-          {/* Editor + Results Workspaces */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Editor Workspace tab wrapper */}
-            <div className="bg-white border border-outline-variant rounded-sm shadow-sm p-6 space-y-4">
+          {/* Editor Workspace tab wrapper */}
+          <div className="lg:col-span-3 bg-white border border-outline-variant rounded-sm shadow-sm p-6 space-y-4">
               {/* Workspace mode toolbar */}
               <div className="flex justify-between items-center bg-surface-container-low p-2 rounded-sm">
                 <div className="flex gap-1.5">
@@ -1018,20 +1017,21 @@ export default function ConsultasEspeciaisPage() {
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Error panel presentation */}
-            {executionError && (
-              <div className="bg-rose-50 border border-rose-200 text-rose-700 p-5 rounded-sm text-xs flex gap-3 text-left">
-                <AlertCircle size={18} className="shrink-0 mt-0.5 text-rose-600" />
-                <div className="space-y-1">
-                  <h4 className="font-black uppercase tracking-wide">Falha na Compilação ou Execução</h4>
-                  <p className="font-mono leading-relaxed">{executionError}</p>
-                </div>
+          {/* Error panel presentation */}
+          {executionError && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 p-5 rounded-sm text-xs flex gap-3 text-left">
+              <AlertCircle size={18} className="shrink-0 mt-0.5 text-rose-600" />
+              <div className="space-y-1">
+                <h4 className="font-black uppercase tracking-wide">Falha na Compilação ou Execução</h4>
+                <p className="font-mono leading-relaxed">{executionError}</p>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Execution results grid representation */}
-            <div className="bg-white border border-outline-variant rounded-sm p-6 shadow-sm min-h-[300px]">
+          {/* Execution results grid representation */}
+          <div className="bg-white border border-outline-variant rounded-sm p-6 shadow-sm min-h-[300px]">
               {isExecuting ? (
                 /* Query loading indicator */
                 <div className="py-20 flex flex-col justify-center items-center gap-4">
@@ -1178,7 +1178,6 @@ export default function ConsultasEspeciaisPage() {
               )}
             </div>
           </div>
-        </div>
       )}
 
       {/* Save query details overlay Modal Dialog */}

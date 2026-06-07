@@ -23,9 +23,10 @@ import {
   X,
   LogOut,
   Database,
-  Scale
+  Scale,
+  Lock
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isPathBlocked } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
 import { useAuth } from "@/lib/contexts/AuthContext";
 
@@ -117,7 +118,17 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-4 space-y-1">
         {(() => {
           const displayMenuItems = [...menuItems];
-          if (user?.perfil === "superAdmin") {
+          const isSuperOrAdmin = user?.perfil === "SUPER_ADMIN" || user?.perfil === "superAdmin" || user?.perfil === "ADMIN" || user?.perfil === "Admin";
+          
+          if (isSuperOrAdmin) {
+            displayMenuItems.push({
+              icon: ShieldPlus, // Shield with a plus as governance
+              label: "Governança & Acessos",
+              href: "/governanca"
+            });
+          }
+
+          if (user?.perfil === "SUPER_ADMIN" || user?.perfil === "superAdmin") {
             displayMenuItems.push({
               icon: Database,
               label: "Consultas Especiais",
@@ -126,23 +137,43 @@ export function Sidebar() {
           }
           return displayMenuItems.map((item) => {
             const isActive = pathname === item.href;
+            const blockedInfo = isPathBlocked(item.href, user);
+            const isBlocked = blockedInfo.blocked;
+
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={cn(
-                  "sidebar-item flex items-center transition-all duration-200",
+                  "sidebar-item flex items-center transition-all duration-200 justify-between",
                   isSidebarCollapsed ? "lg:px-0 lg:justify-center lg:gap-0" : "px-6 gap-3",
-                  isActive && "sidebar-item-active"
+                  isActive && "sidebar-item-active",
+                  isBlocked && "opacity-60 hover:bg-red-50/10"
                 )}
-                title={isSidebarCollapsed ? item.label : undefined}
+                title={isSidebarCollapsed ? `${item.label} ${isBlocked ? '(Bloqueado)' : ''}` : undefined}
               >
-                <item.icon size={20} className="shrink-0" strokeWidth={isActive ? 2.5 : 2} />
-                
-                {(!isSidebarCollapsed || isMobileMenuOpen) && (
-                  <span className={cn(isActive && "font-bold", "text-sm truncate transition-opacity duration-300")}>
-                    {item.label}
+                <div className="flex items-center gap-3 overflow-hidden">
+                  {isBlocked ? (
+                    <Lock size={18} className="shrink-0 text-red-650" />
+                  ) : (
+                    <item.icon size={20} className="shrink-0" strokeWidth={isActive ? 2.5 : 2} />
+                  )}
+                  
+                  {(!isSidebarCollapsed || isMobileMenuOpen) && (
+                    <span className={cn(
+                      isActive && "font-bold", 
+                      "text-sm truncate transition-opacity duration-300",
+                      isBlocked && "text-secondary font-medium line-through"
+                    )}>
+                      {item.label}
+                    </span>
+                  )}
+                </div>
+
+                {isBlocked && (!isSidebarCollapsed || isMobileMenuOpen) && (
+                  <span className="text-[8px] bg-red-50 text-red-650 border border-red-200/40 rounded-full px-1.5 py-0.5 font-bold uppercase shrink-0">
+                    Bloq
                   </span>
                 )}
               </Link>

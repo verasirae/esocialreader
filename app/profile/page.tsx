@@ -121,6 +121,7 @@ export default function ProfilePage() {
   // Helper para customizar o badge de nível de acesso
   const getPerfilBadge = (perfil: string) => {
     switch (perfil) {
+      case "SUPER_ADMIN":
       case "superAdmin":
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-rose-50 border border-rose-200 text-rose-700 rounded-full shadow-sm">
@@ -128,18 +129,48 @@ export default function ProfilePage() {
             Super Administrador
           </span>
         );
+      case "ADMIN":
       case "Admin":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-orange-50 border border-orange-200 text-orange-700 rounded-full shadow-sm">
+            <Shield size={12} className="stroke-[2.5]" />
+            Administrador
+          </span>
+        );
+      case "GESTOR":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-blue-50 border border-blue-200 text-blue-700 rounded-full shadow-sm">
+            <Layers size={12} className="stroke-[2.5]" />
+            Gestor
+          </span>
+        );
+      case "ANALISTA":
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full shadow-sm">
             <Layers size={12} className="stroke-[2.5]" />
-            Administrador
+            Analista
+          </span>
+        );
+      case "OPERADOR":
+      case "user":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-purple-50 border border-purple-200 text-purple-700 rounded-full shadow-sm">
+            <User size={12} className="stroke-[2.5]" />
+            Operador
+          </span>
+        );
+      case "CLIENTE":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-cyan-50 border border-cyan-200 text-cyan-700 rounded-full shadow-sm">
+            <User size={12} className="stroke-[2.5]" />
+            Cliente
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-emerald-50 border border-emerald-250 text-emerald-700 rounded-full shadow-sm">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest bg-gray-50 border border-gray-250 text-gray-750 rounded-full shadow-sm">
             <User size={12} className="stroke-[2.5]" />
-            Usuário Operacional
+            {perfil}
           </span>
         );
     }

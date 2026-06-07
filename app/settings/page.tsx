@@ -30,7 +30,7 @@ interface UsuarioData {
   id: string;
   nome: string;
   email: string;
-  perfil: "superAdmin" | "Admin" | "user";
+  perfil: "SUPER_ADMIN" | "ADMIN" | "GESTOR" | "ANALISTA" | "OPERADOR" | "CLIENTE" | "superAdmin" | "Admin" | "user";
   ativo: boolean;
   createdAt: string;
 }
@@ -49,7 +49,7 @@ export default function SettingsPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
-  const [perfil, setPerfil] = useState<"superAdmin" | "Admin" | "user">("user");
+  const [perfil, setPerfil] = useState<string>("OPERADOR");
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,7 +60,7 @@ export default function SettingsPage() {
   const [autoDivergenceAudit, setAutoDivergenceAudit] = useState(true);
   const [envDescription, setEnvDescription] = useState("Produção Homologada");
 
-  const isAdminOrSuper = user?.perfil === "superAdmin" || user?.perfil === "Admin";
+  const isAdminOrSuper = user?.perfil === "SUPER_ADMIN" || user?.perfil === "ADMIN" || user?.perfil === "superAdmin" || user?.perfil === "Admin";
 
   const fetchUsuarios = async () => {
     if (!isAdminOrSuper) return;
@@ -110,7 +110,7 @@ export default function SettingsPage() {
           setFormSuccess(`Usuário ${nome} criado com sucesso! Senha padrão atribuída: senha123`);
           setNome("");
           setEmail("");
-          setPerfil("user");
+          setPerfil("OPERADOR");
           fetchUsuarios();
           setTimeout(() => setShowAddForm(false), 3000);
           return;
@@ -132,6 +132,16 @@ export default function SettingsPage() {
   };
 
   const handleToggleStatus = async (targetUser: UsuarioData) => {
+    if (targetUser.id === user?.id) {
+      alert("Não é possível desativar sua própria conta.");
+      return;
+    }
+    const isRequesterAdmin = user?.perfil === "ADMIN" || user?.perfil === "Admin";
+    const isTargetSuper = targetUser.perfil === "SUPER_ADMIN" || targetUser.perfil === "superAdmin";
+    if (isRequesterAdmin && isTargetSuper) {
+      alert("Iniciativa Bloqueada: Administradores não podem alterar status de SuperAdmins.");
+      return;
+    }
     setActionLoadingId(targetUser.id + "_status");
     try {
       const resp = await fetch(`/api/usuarios/${targetUser.id}`, {
@@ -199,7 +209,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdateRole = async (targetUser: UsuarioData, newRole: "superAdmin" | "Admin" | "user") => {
+  const handleUpdateRole = async (targetUser: UsuarioData, newRole: string) => {
     setActionLoadingId(targetUser.id + "_role");
     try {
       const resp = await fetch(`/api/usuarios/${targetUser.id}`, {
@@ -469,26 +479,39 @@ export default function SettingsPage() {
                                   <span className="text-[10px] text-secondary font-medium font-mono mt-0.5">{u.email}</span>
                                 </div>
                               </td>
-                              <td className="py-3.5 px-4">
-                                {isSelf || (user?.perfil === "Admin" && u.perfil === "superAdmin") ? (
+                              <td className="py-3.5 px-4 font-bold text-on-surface">
+                                {isSelf || ((user?.perfil === "ADMIN" || user?.perfil === "Admin") && (u.perfil === "SUPER_ADMIN" || u.perfil === "superAdmin")) ? (
                                   <span className={cn(
                                     "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full",
-                                    u.perfil === "superAdmin" ? "bg-red-50 text-red-700 border border-red-200" :
-                                    u.perfil === "Admin" ? "bg-orange-50 text-orange-700 border border-orange-200" :
-                                    "bg-blue-50 text-blue-700 border border-blue-200"
+                                    (u.perfil === "SUPER_ADMIN" || u.perfil === "superAdmin") ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                                    (u.perfil === "ADMIN" || u.perfil === "Admin") ? "bg-orange-50 text-orange-700 border border-orange-200" :
+                                    u.perfil === "GESTOR" ? "bg-blue-50 text-blue-700 border border-blue-205" :
+                                    u.perfil === "ANALISTA" ? "bg-indigo-50 text-indigo-700 border border-indigo-200" :
+                                    (u.perfil === "OPERADOR" || u.perfil === "user") ? "bg-purple-50 text-purple-700 border border-purple-200" :
+                                    "bg-cyan-50 text-cyan-700 border border-cyan-200"
                                   )}>
                                     {u.perfil}
                                   </span>
                                 ) : (
                                   <select
                                     value={u.perfil}
-                                    onChange={(e) => handleUpdateRole(u, e.target.value as any)}
+                                    onChange={(e) => handleUpdateRole(u, e.target.value)}
                                     disabled={isRoleActionLoading}
-                                    className="text-xs bg-[#FAF9FC] border border-outline-variant/60 rounded px-1.5 py-1 font-semibold text-primary outline-none focus:border-[#1B365D] cursor-pointer"
+                                    className="text-xs bg-[#FAF9FC] border border-outline-variant/60 rounded px-1.5 py-1 font-semibold text-primary outline-none focus:border-[#1B365D] cursor-pointer font-mono"
                                   >
-                                    {user?.perfil === "superAdmin" && <option value="superAdmin">superAdmin</option>}
-                                    <option value="Admin">Admin</option>
-                                    <option value="user">user</option>
+                                    {(user?.perfil === "SUPER_ADMIN" || user?.perfil === "superAdmin") && (
+                                      <>
+                                        <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                                        <option value="superAdmin">superAdmin</option>
+                                      </>
+                                    )}
+                                    <option value="ADMIN">ADMIN</option>
+                                    <option value="GESTOR">GESTOR</option>
+                                    <option value="ANALISTA">ANALISTA</option>
+                                    <option value="OPERADOR">OPERADOR</option>
+                                    <option value="CLIENTE">CLIENTE</option>
+                                    {u.perfil === "Admin" && <option value="Admin">Admin</option>}
+                                    {u.perfil === "user" && <option value="user">user</option>}
                                   </select>
                                 )}
                               </td>
@@ -607,12 +630,17 @@ export default function SettingsPage() {
                         <label className="block text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">Perfil de Acesso</label>
                         <select
                           value={perfil}
-                          onChange={(e) => setPerfil(e.target.value as any)}
-                          className="w-full text-xs font-semibold text-primary bg-[#FAF9FC] border border-outline-variant/60 rounded-sm px-3 py-2 outline-none focus:border-indigo-600 cursor-pointer"
+                          onChange={(e) => setPerfil(e.target.value)}
+                          className="w-full text-xs font-semibold text-primary bg-[#FAF9FC] border border-outline-variant/60 rounded-sm px-3 py-2 outline-none focus:border-[#1B365D] cursor-pointer font-mono"
                         >
-                          {user?.perfil === "superAdmin" && <option value="superAdmin">superAdmin (Acesso Total)</option>}
-                          <option value="Admin">Admin (Administrador)</option>
-                          <option value="user font-normal">user (Usuário comum)</option>
+                          {(user?.perfil === "SUPER_ADMIN" || user?.perfil === "superAdmin") && (
+                            <option value="SUPER_ADMIN">SUPER_ADMIN (Acesso Total)</option>
+                          )}
+                          <option value="ADMIN">ADMIN (Administrador)</option>
+                          <option value="GESTOR">GESTOR (Gestão Operacional)</option>
+                          <option value="ANALISTA">ANALISTA (Analista Fiscal)</option>
+                          <option value="OPERADOR">OPERADOR (Operação Geral)</option>
+                          <option value="CLIENTE">CLIENTE (Acesso Restrito)</option>
                         </select>
                       </div>
 
@@ -650,17 +678,29 @@ export default function SettingsPage() {
                   </h4>
 
                   <ul className="space-y-3 text-[11px] leading-relaxed text-secondary font-semibold font-sans">
-                    <li className="p-2 border-l-2 border-red-500 bg-red-50/20">
-                      <strong className="text-red-700 block text-[10px] uppercase tracking-wider font-mono">superAdmin</strong>
-                      Acesso completo às ferramentas operacionais fiscais, configurações gerais da infraestrutura e exclusão/promoção irrestrita de usuários.
+                    <li className="p-2 border-l-2 border-rose-500 bg-rose-50/20">
+                      <strong className="text-rose-700 block text-[10px] uppercase tracking-wider font-mono font-bold">SUPER_ADMIN</strong>
+                      Acesso completo às ferramentas operacionais fiscais, configurações gerais da infraestrutura, gerenciamento avançado e exclusão/promoção irrestrita de usuários.
                     </li>
                     <li className="p-2 border-l-2 border-orange-500 bg-orange-50/20">
-                      <strong className="text-orange-700 block text-[10px] uppercase tracking-wider font-mono">Admin</strong>
-                      Pode gerenciar de forma autônoma certificados digitais, cadastrar emissores e gerenciar contas com regras <span className="font-bold">user</span> e <span className="font-bold">Admin</span>. Não altera contas <span className="font-bold">superAdmin</span>.
+                      <strong className="text-orange-700 block text-[10px] uppercase tracking-wider font-mono font-bold">ADMIN</strong>
+                      Pode gerenciar de forma autônoma certificados digitais, cadastrar emissores e gerenciar contas de todos os perfis, exceto SUPER_ADMIN.
                     </li>
                     <li className="p-2 border-l-2 border-blue-500 bg-blue-50/20">
-                      <strong className="text-blue-700 block text-[10px] uppercase tracking-wider font-mono">user</strong>
-                      Visualiza auditoria, importa arquivos de XML e relatórios gerais de conformidade. Não possui acesso operacional de edição administrativa.
+                      <strong className="text-blue-700 block text-[10px] uppercase tracking-wider font-mono font-bold">GESTOR</strong>
+                      Visualização completa de relatórios, acompanhamento de KPIs de emissores, exportação de dados e gestão operacional de regras de negócio.
+                    </li>
+                    <li className="p-2 border-l-2 border-indigo-500 bg-indigo-50/20">
+                      <strong className="text-indigo-700 block text-[10px] uppercase tracking-wider font-mono font-bold">ANALISTA</strong>
+                      Acesso operacional fiscal para importação de XMLs, auditoria estruturada, acompanhamento de históricos e execução de rotinas diárias de compliance.
+                    </li>
+                    <li className="p-2 border-l-2 border-purple-500 bg-purple-50/20">
+                      <strong className="text-purple-700 block text-[10px] uppercase tracking-wider font-mono font-bold">OPERADOR</strong>
+                      Entrada básica de dados, carregamento de notas fiscais, visualização de painéis operacionais primários e conferência geral.
+                    </li>
+                    <li className="p-2 border-l-2 border-cyan-500 bg-cyan-50/20">
+                      <strong className="text-cyan-700 block text-[10px] uppercase tracking-wider font-mono font-bold">CLIENTE</strong>
+                      Consulta e leitura exclusiva de relatórios individuais, auditoria passiva de movimentações próprias e visualização de conformidade fiscal.
                     </li>
                   </ul>
                 </div>

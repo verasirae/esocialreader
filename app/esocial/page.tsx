@@ -31,6 +31,7 @@ import {
 import { cn, safeJsonFetch } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { gerarInformePDF } from "@/lib/pdf-generator";
 
 const tableCards = [
   { id: "01", icon: Users, label: "Tabela 01", sub: "Categorias de Trabalhadores - eSocial", type: "OFICIAL", lastUpdate: "12/05/2024" },
@@ -478,6 +479,21 @@ function EsocialTablesContent() {
   const [selectedFechamento, setSelectedFechamento] = useState<any>(null);
   const [showInformeModal, setShowInformeModal] = useState(false);
 
+  const handleDownloadInforme = (f: any) => {
+    if (!f) return;
+    try {
+      const doc = gerarInformePDF(f);
+      const nameClean = f.trabalhador?.nome?.toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "-") || "beneficiario";
+      doc.save(`informe-rendimentos-${nameClean}-${f.ano}.pdf`);
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      alert("Ocorreu um erro ao gerar o PDF do comprovante de rendimentos.");
+    }
+  };
+
   const renderInformeModal = () => {
     if (!selectedFechamento) return null;
     const f = selectedFechamento;
@@ -573,7 +589,10 @@ function EsocialTablesContent() {
               * Este documento foi gerado automaticamente através da consolidação dos eventos S-5002 transmitidos ao eSocial.
             </p>
             <div className="flex gap-4">
-              <button className="btn-outline flex items-center gap-2 py-2.5 px-6">
+              <button 
+                onClick={() => handleDownloadInforme(f)}
+                className="btn-outline flex items-center gap-2 py-2.5 px-6"
+              >
                 <Download size={14} />
                 <span>Baixar PDF</span>
               </button>
@@ -1319,7 +1338,11 @@ function EsocialTablesContent() {
                            >
                               <Eye size={14} className="text-primary" />
                            </button>
-                           <button className="p-2 bg-surface hover:bg-white border border-outline-variant rounded transition-all shadow-sm">
+                            <button 
+                              onClick={() => handleDownloadInforme(f)}
+                              title="Baixar Comprovante PDF"
+                              className="p-2 bg-surface hover:bg-white border border-outline-variant rounded transition-all shadow-sm"
+                            >
                               <Download size={14} className="text-secondary" />
                            </button>
                          </div>
