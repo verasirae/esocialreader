@@ -8,7 +8,7 @@
 
 Abaixo está o preview conceitual da interface do **eSocial S-5002 Fiscal Auditor**, destacando os painéis interativos de KPIs, análises de divergências e relatórios dinâmicos:
 
-![Visual Mockup Demo](/src/assets/images/dashboard_demo_1780932422043.png)
+![Visual Mockup Demo](/src/assets/images/real_dashboard_live_1780933290947.png)
 
 *(Para uma visualização fluida e demonstração interativa dos fluxos, utilize o ambiente Dev na porta 3000 do contêiner).*
 
