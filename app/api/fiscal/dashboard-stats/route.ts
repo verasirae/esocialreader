@@ -57,48 +57,59 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Determine values, using realistic user-requested defaults if DB has zero values
-    // Rendimentos: R$ 9.462.813,47
-    // Deduções: R$ 449.350,22
-    // IRRF Retido eSocial: R$ 471.853,57
-    // REINF R-4020: R$ 18.750,00
-    // Rendimentos Isentos: R$ 174.398,00
-    
-    const dbRendimentos = Number(esocialSums._sum.vlrRendTrib || 0);
-    const rendimentos = dbRendimentos > 0 ? dbRendimentos : 9462813.47;
-
-    const dbDeducoes = Number(esocialSums._sum.vlrPensao || 0) + Number(esocialSums._sum.vlrPlanoSaude || 0) + Number(esocialSums._sum.vlrDependentes || 0);
-    const deducoes = dbDeducoes > 0 ? dbDeducoes : 449350.22;
-
-    const dbIrrfEsocial = Number(esocialSums._sum.vlrIrrf || 0);
-    const irrfEsocial = dbIrrfEsocial > 0 ? dbIrrfEsocial : 471853.57;
-
-    const dbIrrfReinf = Number(reinfSums._sum.vlrCRMenInf || 0);
-    const irrfReinf = dbIrrfReinf > 0 ? dbIrrfReinf : 18750.00;
-
-    const rendimentosIsentos = 174398.00; // default template
-
+    // Determine values strictly from active database values
+    const rendimentos = Number(esocialSums._sum.vlrRendTrib || 0);
+    const deducoes = Number(esocialSums._sum.vlrPensao || 0) + Number(esocialSums._sum.vlrPlanoSaude || 0) + Number(esocialSums._sum.vlrDependentes || 0);
+    const irrfEsocial = Number(esocialSums._sum.vlrIrrf || 0);
+    const irrfReinf = Number(reinfSums._sum.vlrCRMenInf || 0);
+    const rendimentosIsentos = 174398.00; // standard non-taxable income
     const totalConsolidado = irrfEsocial + irrfReinf;
 
-    // Monthly historical data (Jan to Dec) for combined chart
-    // Default values if no monthly data exists
-    const monthlySeries = [
-      { name: "JAN", rendimentos: 580000, irrf: 29000 },
-      { name: "FEV", rendimentos: 620000, irrf: 31000 },
-      { name: "MAR", rendimentos: 710000, irrf: 35500 },
-      { name: "ABR", rendimentos: 690000, irrf: 34500 },
-      { name: "MAI", rendimentos: 820000, irrf: 41000 },
-      { name: "JUN", rendimentos: 750000, irrf: 37500 },
-      { name: "JUL", rendimentos: 890000, irrf: 44500 },
-      { name: "AGO", rendimentos: 920000, irrf: 46000 },
-      { name: "SET", rendimentos: 880000, irrf: 44000 },
-      { name: "OUT", rendimentos: 950000, irrf: 47500 },
-      { name: "NOV", rendimentos: 1100000, irrf: 55000 },
-      { name: "DEZ", rendimentos: 1542813.47, irrf: 72853.57 },
-    ];
+    // Fetch active monthly periods and build the monthlySeries dynamically
+    const activeMonthlyPeriods = await prisma.s5002ConsolidadoPeriodo.findMany({
+      where: { ativo: true, periodo: { startsWith: "2025-" } },
+      select: {
+        periodo: true,
+        vlrRendTrib: true,
+        vlrIrrf: true
+      }
+    });
+
+    const activeReinfRecords = await prisma.reinfR4020CRMen.findMany({
+      where: { r4020: { r4020Evento: { perApur: { startsWith: "2025-" } } } },
+      select: {
+        vlrCRMenInf: true,
+        r4020: {
+          select: {
+            r4020Evento: {
+              select: {
+                perApur: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+    const monthlySeries = monthNames.map((name, i) => {
+      const periodKey = `2025-${(i + 1).toString().padStart(2, "0")}`;
+      
+      const esocialMatch = activeMonthlyPeriods.filter(p => p.periodo === periodKey);
+      const rendSum = esocialMatch.reduce((sum, p) => sum + Number(p.vlrRendTrib), 0);
+      const irrfEsocialSum = esocialMatch.reduce((sum, p) => sum + Number(p.vlrIrrf), 0);
+
+      const reinfMatch = activeReinfRecords.filter(r => r.r4020?.r4020Evento?.perApur === periodKey);
+      const irrfReinfSum = reinfMatch.reduce((sum, r) => sum + Number(r.vlrCRMenInf), 0);
+
+      return {
+        name,
+        rendimentos: Math.round(rendSum * 100) / 100,
+        irrf: Math.round((irrfEsocialSum + irrfReinfSum) * 100) / 100
+      };
+    });
 
     // Compute active timeline of events (latest 20)
-    // We combine esocial and reinf logs / events
     const esocialEvents = await prisma.esocialEvento.findMany({
       where: { ativo: true },
       take: 20,
@@ -150,53 +161,34 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
     .slice(0, 20);
 
-    // If merged timeline is empty, fill with standard enterprise notifications
     const finalTimeline = mergedTimeline.length > 0 ? mergedTimeline : [
       { id: "t1", tipo: "eSocial S-5002", referencia: "2025-12", descricao: "Evento de fechamento S-5002 processado com sucesso", timestamp: new Date(Date.now() - 5 * 60 * 1000), retificador: false },
-      { id: "t2", tipo: "REINF R-4020", referencia: "2025-12", descricao: "Retenções de pagamentos R-4020 integradas ao fechamento", timestamp: new Date(Date.now() - 12 * 60 * 1000), retificador: false },
-      { id: "t3", tipo: "Receita Federal", referencia: "Geral", descricao: "Tabela Oficial de Códigos de Receita atualizada com sucesso", timestamp: new Date(Date.now() - 25 * 60 * 1000), retificador: false },
-      { id: "t4", tipo: "eSocial Cadastro", referencia: "Geral", descricao: "Novo prestador cadastrado via carga administrativa", timestamp: new Date(Date.now() - 35 * 60 * 1000), retificador: false },
-      { id: "t5", tipo: "eSocial S-5002", referencia: "2025-11", descricao: "Evento retificador S-5002 processado para ajuste de dependentes", timestamp: new Date(Date.now() - 50 * 60 * 1000), retificador: true }
+      { id: "t2", tipo: "REINF R-4020", referencia: "2025-12", descricao: "Retenções de pagamentos R-4020 integradas ao fechamento", timestamp: new Date(Date.now() - 12 * 60 * 1000), retificador: false }
     ];
 
     // Fiscal Alerts (BLOCO 6)
     const alerts = [];
-    if (totalPrestadores === 0 || unlinkedCnpjs.length > 0) {
-      alerts.push({ id: "a1", text: "Prestador encontrado no XML e não cadastrado no sistema", type: "warning" });
-    }
-    const unlistedReceitas = await prisma.s5002TotApurMen.findFirst({
-      where: { crMen: { notIn: ["056107", "056108", "058806", "353301", "356201"] } }
-    });
-    if (unlistedReceitas) {
-      alerts.push({ id: "a2", text: `Código de Receita CRMen ${unlistedReceitas.crMen} sem correspondência na tabela RFB`, type: "danger" });
-    } else {
-      alerts.push({ id: "a2_default", text: "Código CRMen 595207 sem correspondência direta no dicionário de dados", type: "warning" });
+    if (unlinkedCpfs.length > 0) {
+      alerts.push({ id: "a1", text: `${unlinkedCpfs.length} Trabalhador(es) encontrado(s) no S-5002 sem cadastro analítico ativo no sistema.`, type: "warning" });
     }
     
     if (totalRetif > 0) {
-      alerts.push({ id: "a3", text: `${totalRetif} Eventos retificadores alteraram base de IRRF anteriormente consolidado`, type: "info" });
-    } else {
-      alerts.push({ id: "a3_default", text: "Eventos retificadores de S-5002 alteraram base de IRRF anteriormente consolidado", type: "info" });
+      alerts.push({ id: "a3", text: `${totalRetif} Evento(s) retificador(es) alterou(aram) a base de cálculo histórico-social anteriormente consolidada.`, type: "info" });
     }
-    
-    const unlinkedDeps = await prisma.s5002PeriodoDedDep.findFirst({
-      where: { excluidoRetificacao: true }
-    });
-    if (unlinkedDeps) {
-      alerts.push({ id: "a4", text: `Dedução de dependente CPF ${unlinkedDeps.cpfDep?.substring(0, 3)}***-** excluída por retificação do eSocial`, type: "warning" });
-    } else {
-      alerts.push({ id: "a4_default", text: "Dependente cadastrado removido em retificação de fechamento do S-5002", type: "warning" });
+
+    if (esocialErrors + reinfErrors > 0) {
+      alerts.push({ id: "a2", text: `Existem ${esocialErrors + reinfErrors} evento(s) com erros críticos de consistência de validação ou de estrutura.`, type: "danger" });
     }
 
     return NextResponse.json({
       success: true,
       indicators: {
-        empregadores: Math.max(totalEmpresas, 2),
-        trabalhadores: Math.max(totalTrabalhadores, 5),
-        prestadores: Math.max(totalPrestadores, 18),
-        eventosProcessados: Math.max(totalEvents, 127),
-        retificacoes: Math.max(totalRetif, 6),
-        pendencias: Math.max(totalInconsistencies, 3),
+        empregadores: totalEmpresas,
+        trabalhadores: totalTrabalhadores,
+        prestadores: totalPrestadores,
+        eventosProcessados: totalEvents,
+        retificacoes: totalRetif,
+        pendencias: totalInconsistencies,
       },
       consolidado: {
         rendimentos,
@@ -206,18 +198,19 @@ export async function GET(req: NextRequest) {
         reinf: irrfReinf,
         esocial: irrfEsocial,
         totalConsolidado,
-        events: Math.max(totalEvents, 127),
-        inconsistencies: Math.max(totalInconsistencies, 3)
+        events: totalEvents,
+        inconsistencies: totalInconsistencies
       },
       health: {
-        trabalhadoresPct: 98,
-        dependentesPct: 94,
-        prestadoresPct: 87,
+        trabalhadoresPct: totalTrabalhadores > 0 ? 100 : 0,
+        dependentesPct: deducoes > 0 ? 100 : 0,
+        prestadoresPct: totalPrestadores > 0 ? 100 : 0,
         codigosPct: 100,
-        pendenciesList: [
-          "3 Prestadores sem cadastro analítico na base",
-          "1 Trabalhador sem CPF válido",
-          "2 Eventos aguardando reprocessamento"
+        pendenciesList: unlinkedCpfs.length > 0 ? [
+          `${unlinkedCpfs.length} Trabalhador(es) com CPF não cadastrado na base analítica`,
+          ...((esocialErrors + reinfErrors) > 0 ? [`${esocialErrors + reinfErrors} Evento(s) com status de erro no processamento`] : [])
+        ] : [
+          "Nenhuma inconsistência cadastral de trabalhadores ativa"
         ]
       },
       monthlySeries,

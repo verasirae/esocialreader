@@ -311,6 +311,11 @@ export default function Dashboard() {
   const cons = stats.consolidado;
   const healthObj = stats.health;
 
+  // Compute dynamic percentage of eSocial vs REINF
+  const totalIrrfConsolidado = cons.totalConsolidado || (cons.esocial + cons.reinf) || 1;
+  const esocialPct = Math.round((cons.esocial / totalIrrfConsolidado) * 100);
+  const reinfPct = 100 - esocialPct;
+
   // eSocial S-5002 vs REINF R-4020 Pie Data
   const sourceData = [
     { name: "eSocial", value: cons.esocial, color: "#1B365D" },
@@ -613,19 +618,19 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-neutral-50 border border-outline-variant rounded-sm font-mono text-center">
               <div className="flex flex-col gap-0.5 border-r border-neutral-200">
                 <span className="text-[8px] text-secondary font-bold uppercase">Rend. Tributáveis</span>
-                <span className="text-[11px] font-bold text-[#1B365D]">R$ 9.462.813</span>
+                <span className="text-[11px] font-bold text-[#1B365D]">R$ {cons.rendimentos.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex flex-col gap-0.5 border-r border-neutral-200">
                 <span className="text-[8px] text-secondary font-bold uppercase">Deduções</span>
-                <span className="text-[11px] font-bold text-amber-700">R$ 449.350</span>
+                <span className="text-[11px] font-bold text-amber-700">R$ {cons.deducoes.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex flex-col gap-0.5 border-r border-neutral-200">
                 <span className="text-[8px] text-secondary font-bold uppercase">IRRF Retido S-5002</span>
-                <span className="text-[11px] font-bold text-emerald-700">R$ 471.853</span>
+                <span className="text-[11px] font-bold text-emerald-700">R$ {cons.esocial.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-[8px] text-secondary font-bold uppercase">Rend. Isentos</span>
-                <span className="text-[11px] font-bold text-neutral-700">R$ 174.398</span>
+                <span className="text-[11px] font-bold text-neutral-700">R$ {cons.rendimentosIsentos.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
 
@@ -669,15 +674,15 @@ export default function Dashboard() {
             <div className="flex flex-col gap-2 bg-neutral-50/50 p-3 rounded border border-outline-variant">
               <div className="flex justify-between items-center text-[10px] pb-1 border-b border-neutral-100">
                 <span className="font-bold text-secondary">eSocial S-5002</span>
-                <span className="font-mono font-bold text-neutral-900">R$ 471.853</span>
+                <span className="font-mono font-bold text-neutral-900">R$ {cons.esocial.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between items-center text-[10px] pb-1 border-b border-neutral-100">
                 <span className="font-bold text-secondary">REINF R-4020</span>
-                <span className="font-mono font-bold text-neutral-900">R$ 18.750</span>
+                <span className="font-mono font-bold text-neutral-900">R$ {cons.reinf.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between items-center text-[10px] font-black text-[#1B365D] pt-1">
                 <span>Total Consolidado</span>
-                <span className="font-mono font-extrabold">R$ 490.603</span>
+                <span className="font-mono font-extrabold">R$ {cons.totalConsolidado.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
 
@@ -705,7 +710,7 @@ export default function Dashboard() {
               </ResponsiveContainer>
               {/* Abs center label */}
               <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-[14px] font-mono font-black text-neutral-900">85%</span>
+                <span className="text-[14px] font-mono font-black text-neutral-900">{esocialPct}%</span>
                 <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-widest leading-none">eSocial</span>
               </div>
             </div>
@@ -713,11 +718,11 @@ export default function Dashboard() {
             <div className="flex justify-center gap-6 text-[9px] font-bold uppercase tracking-wider mt-1">
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-[#1B365D]" />
-                eSocial S-5002 (85%)
+                eSocial S-5002 ({esocialPct}%)
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-[#6366F1]" />
-                REINF R-4020 (15%)
+                REINF R-4020 ({reinfPct}%)
               </div>
             </div>
           </div>
@@ -735,22 +740,22 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-4 pb-2">
               <div className="p-3 bg-neutral-50 border border-outline-variant rounded flex flex-col gap-1">
                 <span className="text-[8px] font-bold text-secondary uppercase">Trabalhadores</span>
-                <span className="text-base font-black text-emerald-800 font-mono">✓ 98% identificados</span>
+                <span className="text-base font-black text-emerald-800 font-mono">✓ {healthObj.trabalhadoresPct}% identificados</span>
               </div>
 
               <div className="p-3 bg-neutral-50 border border-outline-variant rounded flex flex-col gap-1">
                 <span className="text-[8px] font-bold text-secondary uppercase">Dependentes</span>
-                <span className="text-base font-black text-emerald-800 font-mono">✓ 94% vinculados</span>
+                <span className="text-base font-black text-emerald-800 font-mono">✓ {healthObj.dependentesPct}% vinculados</span>
               </div>
 
               <div className="p-3 bg-neutral-50 border border-outline-variant rounded flex flex-col gap-1">
                 <span className="text-[8px] font-bold text-secondary uppercase">Prestadores</span>
-                <span className="text-base font-black text-emerald-800 font-mono">✓ 87% cadastrados</span>
+                <span className="text-base font-black text-emerald-800 font-mono">✓ {healthObj.prestadoresPct}% cadastrados</span>
               </div>
 
               <div className="p-3 bg-neutral-50 border border-outline-variant rounded flex flex-col gap-1">
                 <span className="text-[8px] font-bold text-secondary uppercase">Códigos Receita</span>
-                <span className="text-base font-black text-emerald-800 font-mono">✓ 100% mapeados</span>
+                <span className="text-base font-black text-emerald-800 font-mono">✓ {healthObj.codigosPct}% mapeados</span>
               </div>
             </div>
 
