@@ -9,12 +9,8 @@ import {
   Users, 
   Stethoscope, 
   FileText, 
-  History, 
   ShieldCheck, 
   AlertTriangle,
-  UserCog, 
-  Settings, 
-  HelpCircle,
   ChevronLeft,
   ChevronRight,
   Plus, 
@@ -38,16 +34,9 @@ const menuItems = [
   { icon: ShieldCheck, label: "Consolidação Fiscal", href: "/consolidacao" },
   { icon: FileText, label: "EFD-REINF", href: "/reinf" },
   { icon: AlertTriangle, label: "Pendências", href: "/pendencias" },
-  { icon: History, label: "Histórico de XML", href: "/history" },
   { icon: ShieldCheck, label: "Auditoria e Timeline", href: "/audit" },
   { icon: FileText, label: "DIRF Digital", href: "/reports" },
   { icon: Scale, label: "Códigos de Receita", href: "/codigos-receita" },
-];
-
-const footerItems = [
-  { icon: UserCog, label: "Perfil do Usuário", href: "/profile" },
-  { icon: Settings, label: "Configurações", href: "/settings" },
-  { icon: HelpCircle, label: "Centro de Ajuda", href: "/help" },
 ];
 
 export function Sidebar() {
@@ -247,27 +236,6 @@ export function Sidebar() {
         "mt-auto border-t border-outline-variant bg-white",
         isSidebarCollapsed ? "lg:py-4" : "py-4"
       )}>
-        {/* Footer menu items */}
-        <div className="flex flex-col gap-0.5 mb-4">
-          {footerItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className={cn(
-                "sidebar-item flex items-center transition-all duration-200",
-                isSidebarCollapsed ? "lg:px-0 lg:justify-center lg:gap-0" : "px-6 gap-3"
-              )}
-              title={isSidebarCollapsed ? item.label : undefined}
-            >
-              <item.icon size={20} className="shrink-0" />
-              {(!isSidebarCollapsed || isMobileMenuOpen) && (
-                <span className="text-sm truncate">{item.label}</span>
-              )}
-            </Link>
-          ))}
-        </div>
-
         {/* User profile info */}
         <div className={cn(
           "border-t border-outline-variant",

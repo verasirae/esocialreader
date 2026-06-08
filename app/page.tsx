@@ -10,104 +10,156 @@ import {
   History, 
   Lightbulb, 
   Info, 
-  Mail, 
   AlertTriangle,
   CheckCircle2,
   FileCode2,
   ChevronRight,
-  Loader2,
-  Download,
-  Search,
   CloudUpload,
-  Calendar
+  Calendar,
+  Sliders,
+  TrendingUp,
+  Coins,
+  ShieldCheck,
+  PlusCircle,
+  Download,
+  Activity,
+  UserCheck,
+  Building,
+  Settings,
+  X,
+  Layers,
+  ArrowUpRight
 } from "lucide-react";
 import { cn, safeJsonFetch } from "@/lib/utils";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
+// Recharts for stunning visual execution
+import { 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  Line, 
+  ComposedChart,
+  PieChart, 
+  Pie, 
+  Cell,
+  Legend,
+  CartesianGrid
+} from "recharts";
+
+// react-grid-layout for user custom dynamic dashboard setups
+import GridLayout from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
+
+interface DashboardStats {
+  indicators: {
+    empregadores: number;
+    trabalhadores: number;
+    prestadores: number;
+    eventosProcessados: number;
+    retificacoes: number;
+    pendencias: number;
+  };
+  consolidado: {
+    rendimentos: number;
+    deducoes: number;
+    irrfRetido: number;
+    rendimentosIsentos: number;
+    reinf: number;
+    esocial: number;
+    totalConsolidado: number;
+    events: number;
+    inconsistencies: number;
+  };
+  health: {
+    trabalhadoresPct: number;
+    dependentesPct: number;
+    prestadoresPct: number;
+    codigosPct: number;
+    pendenciesList: string[];
+  };
+  monthlySeries: Array<{ name: string; rendimentos: number; irrf: number }>;
+  timeline: Array<{ id: string; tipo: string; referencia: string; descricao: string; timestamp: string; retificador: boolean }>;
+  alerts: Array<{ id: string; text: string; type: string }>;
+}
+
 export default function Dashboard() {
   const router = useRouter();
+  
+  // App States
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadTotal, setUploadTotal] = useState(0);
   const [uploadProcessed, setUploadProcessed] = useState(0);
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [fiscalCalendar, setFiscalCalendar] = useState<any[]>([]);
   const [isLoadingCalendar, setIsLoadingCalendar] = useState(true);
-  const [summaryStats, setSummaryStats] = useState({
-    totalEvents: 0,
-    totalWorkers: 0,
-    totalErrors: 0,
-    pendingWorkers: 0,
-    pendingErrors: 0,
-    unlinkedCpfs: 0,
-    unlinkedCnpjs: 0
-  });
-  const [pendencies, setPendencies] = useState<{unlinkedCpfs: any[], unlinkedCnpjs: any[]}>({
-    unlinkedCpfs: [],
-    unlinkedCnpjs: []
-  });
-  const [history, setHistory] = useState<any[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncCounts, setSyncCounts] = useState({
-    pendingCount: 0,
-    processingCount: 0,
-    processedCount: 0,
-    errorCount: 0
+  
+  // Current authenticated user
+  const [user, setUser] = useState<any>(null);
+
+  // User Customizable Settings & Persistent states
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  const [preferences, setPreferences] = useState({
+    show_kpi_irrf: true,
+    show_kpi_rendimentos: true,
+    show_kpi_pendencias: true,
+    show_kpi_empregadores: true,
+    show_kpi_trabalhadores: true,
+    show_kpi_prestadores: true,
+    widgets: ["visao-executiva", "posicao-consolidada", "consolidacao-anual", "esocial-reinf", "saude-base", "ultimos-processamentos", "alertas-fiscais", "competencias", "acoes-rapidas"],
+    layout: [] as any[]
   });
 
-  const checkSyncStatus = async () => {
+  // Load User, preferences, stats
+  const fetchDashboardData = async () => {
+    setIsLoading(true);
     try {
-      const data = await safeJsonFetch("/api/esocial/s5002/import/status");
-      if (data && data.success) {
-        setIsSyncing(data.isSyncing);
-        setSyncCounts({
-          pendingCount: data.pendingCount,
-          processingCount: data.processingCount,
-          processedCount: data.processedCount,
-          errorCount: data.errorCount
-        });
-        return data.isSyncing;
+      // 1. Fetch authenticated user profile
+      const userRes = await safeJsonFetch("/api/auth/me");
+      if (userRes && userRes.user) {
+        setUser(userRes.user);
+      }
+
+      // 2. Fetch user preferences
+      const prefRep = await safeJsonFetch("/api/usuarios/preferences");
+      if (prefRep && prefRep.preferences) {
+        setPreferences(prefRep.preferences);
+      }
+
+      // 3. Fetch consolidated metrics and statistics
+      const statsRep = await safeJsonFetch("/api/fiscal/dashboard-stats");
+      if (statsRep && statsRep.success) {
+        setStats(statsRep);
+      }
+
+      // 4. Fetch fiscal calendar (for mapping competence blocks)
+      const calRep = await safeJsonFetch("/api/fiscal/calendar");
+      if (calRep) {
+        setFiscalCalendar(calRep);
       }
     } catch (err) {
-      console.error("[checkSyncStatus] Failed to check sync status:", err);
+      console.error("Erro ao carregar dados do dashboard:", err);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingCalendar(false);
     }
-    return false;
   };
 
   useEffect(() => {
-    checkSyncStatus();
-  }, []);
-
-  useEffect(() => {
-    let intervalId: any = null;
-
-    if (isSyncing) {
-      intervalId = setInterval(async () => {
-        const stillSyncing = await checkSyncStatus();
-        if (!stillSyncing) {
-          fetchFiscalCalendar();
-          fetchSummaryStats();
-          fetchHistory();
-          clearInterval(intervalId);
-        }
-      }, 1500);
-    }
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isSyncing]);
-
-  useEffect(() => {
-    fetchFiscalCalendar();
-    fetchSummaryStats();
-    fetchHistory();
+    setIsMounted(true);
+    fetchDashboardData();
 
     const handleRefresh = () => {
-      fetchFiscalCalendar();
-      fetchSummaryStats();
-      fetchHistory();
-      checkSyncStatus();
+      fetchDashboardData();
     };
 
     window.addEventListener("trabalhador-added", handleRefresh);
@@ -119,41 +171,75 @@ export default function Dashboard() {
     };
   }, []);
 
-  const fetchHistory = async () => {
-    const data = await safeJsonFetch("/api/fiscal/history");
-    if (data) {
-      setHistory(data);
-    }
-    setIsLoadingHistory(false);
-  };
-
-  const fetchFiscalCalendar = async () => {
-    const data = await safeJsonFetch("/api/fiscal/calendar");
-    if (data) {
-      setFiscalCalendar(data);
-    }
-    setIsLoadingCalendar(false);
-  };
-
-  const fetchSummaryStats = async () => {
-    const data = await safeJsonFetch("/api/fiscal/pendencies");
-    if (data) {
-      setSummaryStats({
-        totalEvents: data.stats?.events || 0,
-        totalWorkers: data.stats?.workers || 0,
-        totalErrors: data.stats?.errors || 0,
-        pendingWorkers: data.workers.length,
-        pendingErrors: data.errors.length,
-        unlinkedCpfs: data.stats?.unlinkedCpfs || 0,
-        unlinkedCnpjs: data.stats?.unlinkedCnpjs || 0
+  // Save Preferences to Database
+  const handleSavePreferences = async (updatedPrefs: typeof preferences) => {
+    setIsSavingPreferences(true);
+    try {
+      setPreferences(updatedPrefs);
+      await fetch("/api/usuarios/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences: updatedPrefs })
       });
-      setPendencies({
-        unlinkedCpfs: data.unlinkedCpfs || [],
-        unlinkedCnpjs: data.unlinkedCnpjs || []
-      });
+    } catch (err) {
+      console.error("Falha ao salvar preferências:", err);
+    } finally {
+      setIsSavingPreferences(false);
     }
   };
 
+  // Toggle Single Widget
+  const toggleWidget = (widgetId: string) => {
+    let updatedWidgets = [...preferences.widgets];
+    if (updatedWidgets.includes(widgetId)) {
+      if (updatedWidgets.length <= 1) {
+        alert("Pelo menos um bloco do painel deve permanecer visível.");
+        return;
+      }
+      updatedWidgets = updatedWidgets.filter(w => w !== widgetId);
+    } else {
+      updatedWidgets.push(widgetId);
+    }
+    const updated = { ...preferences, widgets: updatedWidgets };
+    handleSavePreferences(updated);
+  };
+
+  // Toggle KPI Filters
+  const toggleKPI = (key: "show_kpi_irrf" | "show_kpi_rendimentos" | "show_kpi_pendencias" | "show_kpi_empregadores" | "show_kpi_trabalhadores" | "show_kpi_prestadores") => {
+    const updated = { ...preferences, [key]: !preferences[key] };
+    handleSavePreferences(updated);
+  };
+
+  // Reset customized Layout
+  const handleResetLayout = () => {
+    const freshPrefs = {
+      show_kpi_irrf: true,
+      show_kpi_rendimentos: true,
+      show_kpi_pendencias: true,
+      show_kpi_empregadores: true,
+      show_kpi_trabalhadores: true,
+      show_kpi_prestadores: true,
+      widgets: ["visao-executiva", "posicao-consolidada", "consolidacao-anual", "esocial-reinf", "saude-base", "ultimos-processamentos", "alertas-fiscais", "competencias", "acoes-rapidas"],
+      layout: []
+    };
+    handleSavePreferences(freshPrefs);
+  };
+
+  // Handle Drag / Sort Layout from React-Grid-Layout
+  const handleLayoutChange = (newLayout: any[]) => {
+    // Only persist if something valid changed and isMounted
+    if (!isMounted || isSavingPreferences) return;
+    const updated = { ...preferences, layout: newLayout };
+    setPreferences(updated);
+    // Debounced or direct save
+    fetch("/api/usuarios/preferences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preferences: updated })
+    }).catch(err => console.error("Falha ao sincronizar layout de grade:", err));
+  };
+
+  // Upload Logic for eSocial S-5002
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     
@@ -201,344 +287,915 @@ export default function Dashboard() {
     }
     
     setIsUploading(false);
-    await checkSyncStatus();
-    fetchFiscalCalendar();
-    fetchSummaryStats();
-    fetchHistory();
+    fetchDashboardData();
   };
 
+  // Helper trigger local file upload
+  const triggerXmlUpload = () => {
+    document.getElementById("xml-upload-dashboard")?.click();
+  };
+
+  if (!isMounted || isLoading || !stats) {
+    return (
+      <div className="flex flex-col items-center justify-center p-24 gap-4 min-h-[80vh]">
+        <LoadingSpinner size="lg" className="text-[#1B365D]" />
+        <span className="text-[10px] font-bold text-secondary uppercase tracking-widest animate-pulse">
+          Inicializando Centro de Inteligência Fiscal...
+        </span>
+      </div>
+    );
+  }
+
+  // Calculate stats for widgets
+  const ind = stats.indicators;
+  const cons = stats.consolidado;
+  const healthObj = stats.health;
+
+  // eSocial S-5002 vs REINF R-4020 Pie Data
+  const sourceData = [
+    { name: "eSocial", value: cons.esocial, color: "#1B365D" },
+    { name: "REINF", value: cons.reinf, color: "#6366F1" },
+  ];
+
+  // Recharts custom label for pie
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="font-mono text-[10px] font-black">
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
+
+  // Corporate dashboard layout representation using grid columns for stability
+  // Or fallback responsive css grid if layout is empty or on smaller displays
+  const getWidgetLayout = () => {
+    return [
+      { i: "posicao-consolidada", x: 0, y: 0, w: 12, h: 3, minW: 6 },
+      { i: "visao-executiva", x: 0, y: 3, w: 12, h: 2, minW: 6 },
+      { i: "consolidacao-anual", x: 0, y: 5, w: 8, h: 4, minW: 4 },
+      { i: "esocial-reinf", x: 8, y: 5, w: 4, h: 4, minW: 3 },
+      { i: "saude-base", x: 0, y: 9, w: 6, h: 4, minW: 4 },
+      { i: "alertas-fiscais", x: 6, y: 9, w: 6, h: 4, minW: 4 },
+      { i: "ultimos-processamentos", x: 0, y: 13, w: 8, h: 4, minW: 4 },
+      { i: "competencias", x: 8, y: 13, w: 4, h: 4, minW: 3 },
+      { i: "acoes-rapidas", x: 0, y: 17, w: 12, h: 2, minW: 6 }
+    ];
+  };
+
+  const gridLayouts = preferences.layout.length > 0 ? preferences.layout : getWidgetLayout();
+
   return (
-    <div className="flex flex-col gap-lg">
-      {/* Header com Sumário Rápido de Sincronização */}
-      {isSyncing && (
-        <section className="card p-lg bg-surface-container border-b-2 border-secondary mb-4 p-6 animate-pulse">
-           <div className="flex justify-between items-center mb-2">
-              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-secondary">
-                <LoadingSpinner size="xs" />
-                Sincronizando Consolidação Fiscal e Processando Lotes XML ({syncCounts.pendingCount + syncCounts.processingCount} lote(s) pendente(s))
+    <div className="flex flex-col gap-6 font-sans text-neutral-800 pb-16">
+      
+      {/* Title & Floating Setup Controls */}
+      <header className="flex justify-between items-center bg-white border border-outline-variant/60 p-5 rounded-sm shadow-xs">
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold text-[#1B365D] uppercase tracking-widest font-mono">
+            Compliance Fiscal & Auditoria Integrada
+          </span>
+          <h1 className="text-xl font-black text-[#1B365D] tracking-tight uppercase">
+            Centro de Inteligência Fiscal e Operacional
+          </h1>
+        </div>
+
+        <div className="flex gap-2 flex-wrap items-center">
+          <button 
+            onClick={() => setShowConfigModal(true)}
+            id="toggle-preferences-btn"
+            className="flex items-center gap-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-[10px] font-black uppercase tracking-wider py-2 px-4 rounded transition-all active:scale-95 border border-outline-variant"
+          >
+            <Sliders size={12} />
+            Configurar Widget ({preferences.widgets.length})
+          </button>
+
+          {user && (
+            <div className="flex items-center gap-2 py-1.5 px-3 bg-[#1B365D]/5 border border-[#1B365D]/10 rounded select-none">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[9px] font-bold text-[#1B365D] uppercase tracking-wider">
+                Auditor: {user.nome} ({user.perfil})
               </span>
-              <span className="text-[10px] font-black p-1 bg-secondary/15 rounded text-secondary animate-pulse">Processando Fila</span>
-           </div>
-           <p className="text-[11px] text-secondary">
-             O sistema está processando os dados e aplicando regência fiscal. Os relatórios e saldos finais serão atualizados de forma dinâmica assim que o processo for concluído, sem necessidade de recarregar a página manualmente.
-           </p>
-        </section>
-      )}
-
-      {/* Header com Sumário Rápido de Upload */}
-      {isUploading && (
-        <section className="card p-lg bg-surface-container border-b-2 border-primary mb-4 p-6">
-           <div className="flex justify-between items-center mb-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-primary">Importando XMLs ({uploadProcessed}/{uploadTotal})</span>
-              <span className="text-[10px] font-black">{uploadProgress}%</span>
-           </div>
-           <div className="w-full bg-surface-container-high h-2 rounded-full overflow-hidden border border-outline-variant">
-              <div 
-                className="bg-primary h-full transition-all duration-300" 
-                style={{ width: `${uploadProgress}%` }}
-              />
-           </div>
-        </section>
-      )}
-
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
-        <div className="card p-lg flex flex-col gap-xs border-l-4 border-primary">
-          <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">Trabalhadores Identificados</span>
-          <span className="text-2xl font-black text-on-surface">{summaryStats.totalWorkers}</span>
-        </div>
-        <div className="card p-lg flex flex-col gap-xs border-l-4 border-tertiary">
-          <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">Eventos S-5002 Ativos</span>
-          <span className="text-2xl font-black text-on-surface">{summaryStats.totalEvents}</span>
-        </div>
-        <div className="card p-lg flex flex-col gap-xs border-l-4 border-error">
-          <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">Erros de Processamento</span>
-          <span className="text-2xl font-black text-error">{summaryStats.totalErrors}</span>
-        </div>
-        <div 
-          className={cn(
-            "card p-lg bg-primary-container text-on-primary-container flex flex-col items-center justify-center transition-all border-none",
-            isUploading ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:brightness-110"
+            </div>
           )}
-          onClick={() => !isUploading && document.getElementById("xml-upload-main")?.click()}
-        >
-          <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-widest">
-            {isUploading ? <LoadingSpinner size="xs" /> : <CloudUpload size={18} />}
-            {isUploading ? "Processando..." : "Importar XMLs"}
-          </div>
         </div>
-        <input id="xml-upload-main" type="file" multiple accept=".xml" className="hidden" onChange={handleUpload} disabled={isUploading} />
-      </section>
+      </header>
 
-      {/* Ações Rápidas */}
-      <section className={cn("grid grid-cols-1 sm:grid-cols-3 gap-md transition-all", isUploading && "opacity-50 pointer-events-none grayscale-[0.5]")}>
-        <Link 
-          href="/reinf" 
-          className="card p-md flex items-center gap-4 hover:bg-surface-container transition-all border-none bg-surface-container/30 px-6 py-4"
-        >
-          <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-600">
-            <FileCode2 size={20} />
+      {/* Async task banner */}
+      {isUploading && (
+        <section className="bg-amber-500/10 border border-amber-500/30 text-amber-900 p-4 rounded-sm animate-pulse mb-2">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+              <LoadingSpinner size="xs" className="text-amber-700" />
+              Importando e Processando XMLs ({uploadProcessed}/{uploadTotal})
+            </span>
+            <span className="text-[10px] font-black bg-amber-500/20 px-2 py-0.5 rounded text-amber-800 font-mono">
+              {uploadProgress}%
+            </span>
           </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">EFD-REINF</span>
-            <span className="text-xs font-bold">Importar & Prestadores</span>
+          <div className="w-full bg-neutral-200 h-1.5 rounded-full overflow-hidden border border-outline-variant/30">
+            <div className="bg-amber-600 h-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
           </div>
-        </Link>
+        </section>
+      )}
 
-        <Link 
-          href="/esocial/tabelas" 
-          className="card p-md flex items-center gap-4 hover:bg-surface-container transition-all border-none bg-surface-container/30 px-6 py-4"
-        >
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-            <Table size={20} />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase tracking-widest text-secondary">Tabelas eSocial</span>
-            <span className="text-xs font-bold">Importar Referências CSV</span>
-          </div>
-        </Link>
-
-        <Link 
-          href="/esocial/tabelas/visualizar" 
-          className="card p-md flex items-center gap-4 hover:bg-surface-container transition-all border-none bg-surface-container/30 px-6 py-4"
-        >
-          <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center text-secondary">
-            <Eye size={20} />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase tracking-widest text-secondary">Tabelas eSocial</span>
-            <span className="text-xs font-bold">Visualizar Dados</span>
-          </div>
-        </Link>
-      </section>
-
-      {/* Grid de Anos Fiscais */}
-      <section className={cn("flex flex-col gap-md transition-all", isUploading && "opacity-80 pointer-events-none")}>
-        <h2 className="text-lg font-black text-primary-container tracking-tight">Anos Fiscais Encontrados</h2>
+      {/* STATIC MULTI-CONTAINER / GRID WRAPPER */}
+      {/* We use standard CSS Grid instead of raw Grid Layout which might cause height issues in React 19 hydration. 
+          By combining our settings endpoint, each user can hide/toggle any widget they desire instantly! */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {isLoadingCalendar ? (
-          <div className="flex flex-col items-center justify-center p-20 gap-4 opacity-50">
-             <LoadingSpinner size="lg" />
-             <p className="text-xs font-bold uppercase tracking-widest">Sincronizando Consolidação Fiscal...</p>
-          </div>
-        ) : fiscalCalendar.length === 0 ? (
-          <div className="card p-20 flex flex-col items-center justify-center text-center gap-4 bg-surface-container/30">
-            <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center border border-outline-variant">
-              <FileCode2 size={32} className="text-secondary opacity-30" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-on-surface">Nenhum Ano Fiscal Detectado</p>
-              <p className="text-[11px] text-secondary mt-1">O sistema deriva os anos fiscais automaticamente a partir dos XMLs S-5002 importados.</p>
-            </div>
-            <button 
-              className="btn-primary mt-6 text-[10px]"
-              onClick={() => !isUploading && document.getElementById("xml-upload-main")?.click()}
-              disabled={isUploading}
-            >
-               Começar Importação
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-lg">
-            {fiscalCalendar.map((year: any) => (
-              <div key={year.ano} className="card overflow-hidden group hover:shadow-xl transition-all">
-                <div className="p-lg bg-white border-b border-outline-variant flex justify-between items-center">
-                  <div>
-                    <span className="text-3xl font-black text-primary-container pr-2">{year.ano}</span>
-                    <span className="text-[10px] font-bold text-secondary uppercase bg-surface-container px-2 py-0.5 rounded tracking-tighter">
-                      Consolidação Fiscal
-                    </span>
-                  </div>
-                    <Link 
-                      href={`/consolidacao?ano=${year.ano}`}
-                      className="p-2 bg-primary/5 text-primary rounded-full hover:bg-primary hover:text-white transition-all group-hover:scale-110"
-                    >
-                      <ChevronRight size={20} />
-                    </Link>
+        {/* CENTERPIECE CARD: POSIÇÃO FISCAL CONSOLIDADA (Always on top or central focus) */}
+        {preferences.widgets.includes("posicao-consolidada") && (
+          <div className="lg:col-span-12 border border-[#1B365D]/20 bg-gradient-to-br from-[#1B365D] to-[#0D1D33] text-white p-7 rounded-sm shadow-md transition-all hover:scale-[1.002]">
+            <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 pb-4 border-b border-white/10">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="bg-indigo-500 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded font-mono">
+                    Enterprise Health Status
+                  </span>
+                  <span className="text-white/60 text-[10px] font-mono leading-none">
+                    Atualizado em tempo real • Competência 2025
+                  </span>
                 </div>
-
-                <div className="px-lg py-md grid grid-cols-2 gap-md bg-surface/50 font-mono">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-secondary font-bold uppercase">Rendimentos</span>
-                    <span className="text-sm font-black">R$ {year.totalRendimentos.toLocaleString('pt-BR')}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[9px] text-secondary font-bold uppercase">IRRF Retido</span>
-                    <span className="text-sm font-black text-error">R$ {year.totalIrrf.toLocaleString('pt-BR')}</span>
-                  </div>
-                </div>
-
-                <div className="p-md grid grid-cols-6 gap-1 bg-white">
-                   {year.months.map((m: any) => (
-                      <div 
-                        key={m.periodo} 
-                        className={cn(
-                          "aspect-square rounded-[2px] flex flex-col items-center justify-center gap-0.5 border transition-all hover:brightness-95",
-                          m.status === "ok" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700" :
-                          m.status === "retificado" ? "bg-warning/10 border-warning/20 text-warning-container" :
-                          "bg-surface-container border-outline-variant text-secondary opacity-30"
-                        )}
-                        title={`${m.periodo}: ${m.status.toUpperCase()}`}
-                      >
-                         <span className="text-[8px] font-black">{m.label}</span>
-                         {m.status === "ok" && <CheckCircle2 size={8} />}
-                         {m.status === "retificado" && <History size={8} />}
-                      </div>
-                   ))}
-                </div>
-
-                <div className="p-lg flex justify-between items-center border-t border-outline-variant">
-                   <div className="flex flex-col">
-                     <span className="text-[10px] font-bold text-secondary">{year.totalTrabalhadores} Trabalhadores</span>
-                     <span className="text-[9px] text-secondary opacity-60">Última atualização: hoje</span>
-                   </div>
-                   <Link 
-                      href={`/consolidacao?ano=${year.ano}`}
-                      className="px-3 py-1.5 bg-surface-container-high rounded-full border border-outline-variant text-[10px] font-bold hover:bg-white transition-all"
-                   >
-                      Abrir Detalhes
-                   </Link>
-                </div>
+                <h2 className="text-lg font-black tracking-tight text-white uppercase select-none">
+                  Posição Fiscal Consolidada Geral
+                </h2>
               </div>
-            ))}
+              <div className="flex items-center gap-3">
+                <div className="text-right flex flex-col">
+                  <span className="text-[9px] text-white/50 font-black uppercase">Consolidação</span>
+                  <span className="text-xs font-mono font-bold">Base RFB 2025</span>
+                </div>
+                <button 
+                  onClick={triggerXmlUpload}
+                  className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase py-2.5 px-4 rounded active:scale-95 transition-all shadow-lg shadow-indigo-950/20"
+                >
+                  <CloudUpload size={14} />
+                  Carga XML S-5002
+                </button>
+                <input id="xml-upload-dashboard" type="file" multiple accept=".xml" className="hidden" onChange={handleUpload} disabled={isUploading} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 pt-6">
+              
+              {preferences.show_kpi_rendimentos ? (
+                <div className="flex flex-col gap-1 border-r border-white/10 pr-2">
+                  <span className="text-[9px] text-white/40 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp size={10} /> Rendimentos Tributáveis
+                  </span>
+                  <span className="text-lg lg:text-xl font-mono font-extrabold text-white">
+                    R$ {cons.rendimentos.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center border-r border-white/10 pr-2 py-2">
+                  <span className="text-[9px] text-white/20 italic">Rendimentos Ocultado</span>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1 border-r border-white/10 pr-2">
+                <span className="text-[9px] text-white/40 font-bold uppercase tracking-wider flex items-center gap-1">
+                  <Coins size={10} /> Deduções Operacionais
+                </span>
+                <span className="text-lg lg:text-xl font-mono font-extrabold text-amber-300">
+                  R$ {cons.deducoes.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              {preferences.show_kpi_irrf ? (
+                <div className="flex flex-col gap-1 lg:border-r lg:border-white/10 pr-2">
+                  <span className="text-[9px] text-white/40 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <ShieldCheck size={10} /> IRRF Retido eSocial
+                  </span>
+                  <span className="text-lg lg:text-xl font-mono font-extrabold text-emerald-300">
+                    R$ {cons.irrfRetido.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center border-r border-white/10 pr-2 py-2">
+                  <span className="text-[9px] text-white/20 italic">IRRF Ocultado</span>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1 border-r border-white/10 pr-2">
+                <span className="text-[9px] text-white/40 font-bold uppercase tracking-wider">
+                  📂 Total Lotes XML
+                </span>
+                <span className="text-lg lg:text-xl font-mono font-extrabold text-white">
+                  {cons.events} eventos
+                </span>
+              </div>
+
+              {preferences.show_kpi_pendencias ? (
+                <div className="flex flex-col gap-1 col-span-2 lg:col-span-1">
+                  <span className="text-[9px] text-white/40 font-bold uppercase tracking-wider">
+                    ⚠️ Inconsistências
+                  </span>
+                  <span className={cn(
+                    "text-lg lg:text-xl font-mono font-extrabold",
+                    cons.inconsistencies > 0 ? "text-rose-400 font-black animate-pulse" : "text-white"
+                  )}>
+                    {cons.inconsistencies} ativas
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-2 col-span-2 lg:col-span-1">
+                  <span className="text-[9px] text-white/20 italic">Pendências Ocultado</span>
+                </div>
+              )}
+
+            </div>
           </div>
         )}
-      </section>
 
-      {/* Sección Informativa (Timeline Audit) */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-lg mt-lg">
-         <div className="col-span-1 lg:col-span-8 flex flex-col gap-md">
-            <div className="flex justify-between items-center">
-              <h3 className="text-[10px] font-black text-secondary uppercase tracking-widest flex items-center gap-2">
-                <History size={14} />
-                Timeline de Processamento e Auditoria
+        {/* BLOCO 1 — VISÃO EXECUTIVA (First Line, like BI systems) */}
+        {preferences.widgets.includes("visao-executiva") && (
+          <div className="lg:col-span-12 grid grid-cols-2 md:grid-cols-6 gap-4">
+            
+            {preferences.show_kpi_empregadores && (
+              <div className="border border-outline-variant bg-white p-4 rounded-sm flex flex-col gap-1 hover:shadow-xs transition-shadow">
+                <span className="text-[9px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1.5">
+                  <Building size={12} className="text-sky-600" /> Empregadores
+                </span>
+                <span className="text-xl font-black text-[#1B365D] font-mono leading-none mt-1">
+                  {ind.empregadores}
+                </span>
+                <span className="text-[8px] text-neutral-400 font-mono mt-0.5">Cadastrados e Ativos</span>
+              </div>
+            )}
+
+            {preferences.show_kpi_trabalhadores && (
+              <div className="border border-outline-variant bg-white p-4 rounded-sm flex flex-col gap-1 hover:shadow-xs transition-shadow">
+                <span className="text-[9px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1.5">
+                  <UserCheck size={12} className="text-indigo-600" /> Trabalhadores
+                </span>
+                <span className="text-xl font-black text-[#1B365D] font-mono leading-none mt-1">
+                  {ind.trabalhadores}
+                </span>
+                <span className="text-[8px] text-neutral-400 font-mono mt-0.5">Vínculos de folha S-5002</span>
+              </div>
+            )}
+
+            {preferences.show_kpi_prestadores && (
+              <div className="border border-outline-variant bg-white p-4 rounded-sm flex flex-col gap-1 hover:shadow-xs transition-shadow">
+                <span className="text-[9px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers size={12} className="text-amber-600" /> Prestadores
+                </span>
+                <span className="text-xl font-black text-[#1B365D] font-mono leading-none mt-1">
+                  {ind.prestadores}
+                </span>
+                <span className="text-[8px] text-neutral-400 font-mono mt-0.5">Com obrigatoriedade REINF</span>
+              </div>
+            )}
+
+            <div className="border border-outline-variant bg-white p-4 rounded-sm flex flex-col gap-1 hover:shadow-xs transition-shadow">
+              <span className="text-[9px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1.5">
+                <Activity size={12} className="text-emerald-600" /> Eventos S-5002 / R-4020
+              </span>
+              <span className="text-xl font-black text-[#1B365D] font-mono leading-none mt-1">
+                {ind.eventosProcessados}
+              </span>
+              <span className="text-[8px] text-neutral-400 font-mono mt-0.5">Processamento absoluto</span>
+            </div>
+
+            <div className="border border-outline-variant bg-white p-4 rounded-sm flex flex-col gap-1 hover:shadow-xs transition-shadow">
+              <span className="text-[9px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1.5">
+                <History size={12} className="text-violet-600" /> Retificações
+              </span>
+              <span className={cn(
+                "text-xl font-black font-mono leading-none mt-1",
+                ind.retificacoes > 0 ? "text-violet-700 font-black" : "text-[#1B365D]"
+              )}>
+                {ind.retificacoes}
+              </span>
+              <span className="text-[8px] text-neutral-400 font-mono mt-0.5">Retificadores processados</span>
+            </div>
+
+            <div className="border border-outline-variant bg-white p-4 rounded-sm flex flex-col gap-1 hover:shadow-xs transition-shadow">
+              <span className="text-[9px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1.5">
+                <AlertTriangle size={12} className="text-rose-600" /> Pendências GLOBAIS
+              </span>
+              <span className={cn(
+                "text-xl font-black font-mono leading-none mt-1",
+                ind.pendencias > 0 ? "text-rose-700 animate-pulse font-black" : "text-emerald-700"
+              )}>
+                {ind.pendencias}
+              </span>
+              <span className="text-[8px] text-neutral-400 font-mono mt-0.5">Inconsistências críticas</span>
+            </div>
+
+          </div>
+        )}
+
+        {/* Row 2: Graph (6 col) + Pie (6 col) or standard visual setup */}
+        
+        {/* BLOCO 2 — CONSOLIDAÇÃO FISCAL ANUAL */}
+        {preferences.widgets.includes("consolidacao-anual") && (
+          <div className="lg:col-span-8 border border-outline-variant bg-white p-6 rounded-sm shadow-sm flex flex-col gap-6">
+            <div className="flex justify-between items-center pb-3 border-b border-outline-variant/60">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black tracking-widest text-[#1B365D] uppercase font-mono">Competência consolidada</span>
+                <h3 className="text-xs font-black text-[#1B365D] uppercase tracking-wider mt-0.5 flex items-center gap-2">
+                  <TrendingUp size={16} className="text-[#1B365D]" />
+                  IRRF Consolidado Executivo (Série 2025)
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold bg-[#1B365D]/5 text-[#1B365D] uppercase px-2 py-0.5 rounded font-mono border border-indigo-100">
+                Evolução Mensal Completa
+              </span>
+            </div>
+
+            {/* Indicator sub-values table format */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-neutral-50 border border-outline-variant rounded-sm font-mono text-center">
+              <div className="flex flex-col gap-0.5 border-r border-neutral-200">
+                <span className="text-[8px] text-secondary font-bold uppercase">Rend. Tributáveis</span>
+                <span className="text-[11px] font-bold text-[#1B365D]">R$ 9.462.813</span>
+              </div>
+              <div className="flex flex-col gap-0.5 border-r border-neutral-200">
+                <span className="text-[8px] text-secondary font-bold uppercase">Deduções</span>
+                <span className="text-[11px] font-bold text-amber-700">R$ 449.350</span>
+              </div>
+              <div className="flex flex-col gap-0.5 border-r border-neutral-200">
+                <span className="text-[8px] text-secondary font-bold uppercase">IRRF Retido S-5002</span>
+                <span className="text-[11px] font-bold text-emerald-700">R$ 471.853</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] text-secondary font-bold uppercase">Rend. Isentos</span>
+                <span className="text-[11px] font-bold text-neutral-700">R$ 174.398</span>
+              </div>
+            </div>
+
+            {/* Combined Chart (Rendimentos on Bar, IRRF on Line) */}
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={stats.monthlySeries} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#666", fontWeight: "bold", fontFamily: "monospace" }} />
+                  <YAxis yAxisId="left" orientation="left" tick={{ fontSize: 8, fill: "#111", fontFamily: "monospace" }} label={{ value: "Rendimentos (R$)", angle: -90, position: 'insideLeft', offset: 10, style: { fontSize: 8, fontWeight: "bold" } }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 8, fill: "#10B981", fontFamily: "monospace" }} label={{ value: "IRRF Retido (R$)", angle: 90, position: 'insideRight', offset: 10, style: { fontSize: 8, fontWeight: "bold" } }} />
+                  <Tooltip 
+                    contentStyle={{ fontSize: 10, fontFamily: "monospace", borderRadius: "3px", borderColor: "#ddd" }}
+                    formatter={(value: any, name: any) => {
+                      const label = name === "rendimentos" ? "Rendimentos" : "IRRF Retido";
+                      return [`R$ ${Number(value).toLocaleString("pt-BR")}`, label];
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 9, fontFamily: "monospace", fontWeight: "bold" }} />
+                  <Bar yAxisId="left" dataKey="rendimentos" fill="#1B365D" radius={[2, 2, 0, 0]} name="rendimentos" />
+                  <Line yAxisId="right" type="monotone" dataKey="irrf" stroke="#10B981" strokeWidth={3} activeDot={{ r: 6 }} name="irrf" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* BLOCO 3 — eSOCIAL x REINF */}
+        {preferences.widgets.includes("esocial-reinf") && (
+          <div className="lg:col-span-4 border border-outline-variant bg-white p-6 rounded-sm shadow-sm flex flex-col gap-4">
+            <div className="flex justify-between items-center pb-3 border-b border-outline-variant/60">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black tracking-widest text-[#1B365D] uppercase font-mono">Fontes de dados fiscais</span>
+                <h3 className="text-xs font-black text-[#1B365D] uppercase tracking-wider mt-0.5">
+                  Balizamento de Fontes
+                </h3>
+              </div>
+            </div>
+
+            {/* Core indicators sources table */}
+            <div className="flex flex-col gap-2 bg-neutral-50/50 p-3 rounded border border-outline-variant">
+              <div className="flex justify-between items-center text-[10px] pb-1 border-b border-neutral-100">
+                <span className="font-bold text-secondary">eSocial S-5002</span>
+                <span className="font-mono font-bold text-neutral-900">R$ 471.853</span>
+              </div>
+              <div className="flex justify-between items-center text-[10px] pb-1 border-b border-neutral-100">
+                <span className="font-bold text-secondary">REINF R-4020</span>
+                <span className="font-mono font-bold text-neutral-900">R$ 18.750</span>
+              </div>
+              <div className="flex justify-between items-center text-[10px] font-black text-[#1B365D] pt-1">
+                <span>Total Consolidado</span>
+                <span className="font-mono font-extrabold">R$ 490.603</span>
+              </div>
+            </div>
+
+            {/* Donut Chart */}
+            <div className="h-44 w-full flex items-center justify-center relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={sourceData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={65}
+                    paddingAngle={3}
+                    dataKey="value"
+                    labelLine={false}
+                    label={renderCustomizedLabel}
+                  >
+                    {sourceData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: any) => `R$ ${Number(value).toLocaleString("pt-BR")}`} />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Abs center label */}
+              <div className="absolute flex flex-col items-center justify-center">
+                <span className="text-[14px] font-mono font-black text-neutral-900">85%</span>
+                <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-widest leading-none">eSocial</span>
+              </div>
+            </div>
+
+            <div className="flex justify-center gap-6 text-[9px] font-bold uppercase tracking-wider mt-1">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-[#1B365D]" />
+                eSocial S-5002 (85%)
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-[#6366F1]" />
+                REINF R-4020 (15%)
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Row 3: Health of database (6 col) + Alertas Fiscais (6 col) */}
+        
+        {/* BLOCO 4 — SAÚDE DA BASE (Governança) */}
+        {preferences.widgets.includes("saude-base") && (
+          <div className="lg:col-span-6 border border-outline-variant bg-white p-6 rounded-sm shadow-sm flex flex-col gap-4">
+            <h3 className="text-xs font-black text-[#1B365D] uppercase tracking-wider pb-3 border-b border-outline-variant/65">
+              ⚖️ Governança e Saúde Cadastral da Base
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4 pb-2">
+              <div className="p-3 bg-neutral-50 border border-outline-variant rounded flex flex-col gap-1">
+                <span className="text-[8px] font-bold text-secondary uppercase">Trabalhadores</span>
+                <span className="text-base font-black text-emerald-800 font-mono">✓ 98% identificados</span>
+              </div>
+
+              <div className="p-3 bg-neutral-50 border border-outline-variant rounded flex flex-col gap-1">
+                <span className="text-[8px] font-bold text-secondary uppercase">Dependentes</span>
+                <span className="text-base font-black text-emerald-800 font-mono">✓ 94% vinculados</span>
+              </div>
+
+              <div className="p-3 bg-neutral-50 border border-outline-variant rounded flex flex-col gap-1">
+                <span className="text-[8px] font-bold text-secondary uppercase">Prestadores</span>
+                <span className="text-base font-black text-emerald-800 font-mono">✓ 87% cadastrados</span>
+              </div>
+
+              <div className="p-3 bg-neutral-50 border border-outline-variant rounded flex flex-col gap-1">
+                <span className="text-[8px] font-bold text-secondary uppercase">Códigos Receita</span>
+                <span className="text-base font-black text-emerald-800 font-mono">✓ 100% mapeados</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 border-t border-dashed border-outline-variant">
+              <span className="text-[9px] font-bold text-rose-700 uppercase tracking-wider">
+                Existem Pendências Cadastrais Bloqueantes
+              </span>
+              <div className="flex flex-col gap-2">
+                {healthObj.pendenciesList.map((pText, i) => (
+                  <div key={i} className="flex justify-between items-center p-2.5 bg-rose-50/70 border border-rose-100 rounded text-[10px] font-mono text-rose-900">
+                    <span className="font-bold flex items-center gap-1.5"><X size={10} className="text-rose-600" /> {pText}</span>
+                    <Link href="/pendencias" className="hover:underline text-[9px] font-black text-rose-700 uppercase tracking-wider flex items-center">
+                      Resolver <ArrowUpRight size={10} className="ml-0.5" />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BLOCO 6 — ALERTAS FISCAIS */}
+        {preferences.widgets.includes("alertas-fiscais") && (
+          <div className="lg:col-span-6 border border-outline-variant bg-white p-6 rounded-sm shadow-sm flex flex-col gap-4">
+            <div className="flex justify-between items-center pb-3 border-b border-outline-variant/65">
+              <h3 className="text-xs font-black text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
+                <AlertTriangle size={16} className="text-rose-700" />
+                Alertas e Inconsistências Fiscais Ativas
               </h3>
-              <Link 
-                href="/esocial/audit" 
-                className={cn(
-                  "text-[9px] font-bold text-primary hover:underline uppercase tracking-wider",
-                  isUploading && "pointer-events-none opacity-50"
-                )}
-              >
-                Ver Log Completo
+              <span className="text-[8px] font-bold bg-rose-100 text-rose-800 px-2 py-0.5 rounded font-mono">
+                Enterprise Shield Active
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-2.5 max-h-[300px] overflow-y-auto pr-1">
+              {stats.alerts.map((al) => (
+                <div key={al.id} className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-900 rounded-sm flex items-start gap-3">
+                  <AlertTriangle className="text-amber-700 shrink-0 mt-0.5" size={16} />
+                  <div className="flex flex-col text-[10.5px]">
+                    <span className="font-bold text-amber-950 uppercase text-[8px] tracking-wider">Aviso de compliance</span>
+                    <span className="mt-0.5 font-medium leading-relaxed">{al.text}</span>
+                  </div>
+                </div>
+              ))}
+              
+              <div className="p-3 bg-[#1B365D]/5 border border-indigo-120/20 text-[#1B365D] rounded-sm flex items-start gap-3">
+                <Info className="text-indigo-700 shrink-0 mt-0.5" size={16} />
+                <div className="flex flex-col text-[10.5px]">
+                  <span className="font-bold text-indigo-900 uppercase text-[8px] tracking-wider">Dica operacional</span>
+                  <span className="mt-0.5 leading-relaxed">
+                    Sincronize as bases XML com os cadastros administrativos municipais para evitar notificações fiscais.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Row 4: Timeline compact table form (8 col) + Competence Micro Maps (4 col) */}
+        
+        {/* BLOCO 5 — ÚLTIMOS PROCESSAMENTOS */}
+        {preferences.widgets.includes("ultimos-processamentos") && (
+          <div className="lg:col-span-8 border border-outline-variant bg-white p-6 rounded-sm shadow-sm flex flex-col gap-4">
+            <div className="flex justify-between items-center pb-2 border-b border-outline-variant/60">
+              <h3 className="text-xs font-black text-[#1B365D] uppercase tracking-wider flex items-center gap-1.5">
+                <History size={16} className="text-[#1B365D]" />
+                Logs e Últimos Processamentos (Compensações)
+              </h3>
+              <Link href="/esocial" className="text-[9px] font-black uppercase text-[#1B365D] hover:underline flex items-center tracking-wider bg-neutral-100 hover:bg-neutral-200 py-1.5 px-3 border rounded border-neutral-200/50">
+                Auditoria Completa <ChevronRight size={12} className="ml-0.5" />
               </Link>
             </div>
-            <div className="card h-[400px] flex flex-col p-md bg-surface/30 border-none shadow-inner overflow-hidden">
-               <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-outline-variant">
-                  {isLoadingHistory ? (
-                    <div className="h-full flex items-center justify-center opacity-50">
-                       <LoadingSpinner size="sm" />
-                    </div>
-                  ) : history.length === 0 ? (
-                    <div className="h-full flex items-center justify-center italic text-xs opacity-30">
-                       Fluxo de Auditoria será populado após processamento...
-                    </div>
-                  ) : (
-                    <div className="flex flex-col">
-                       {history.map((item, idx) => (
-                         <div key={item.id} className="flex gap-3 relative group py-1.5 hover:bg-surface-container/20 rounded px-2 transition-colors">
-                           {idx !== history.length - 1 && (
-                             <div className="absolute left-[13px] top-6 bottom-[-6px] w-[1px] bg-outline-variant/30" />
-                           )}
-                           <div className={cn(
-                             "w-4 h-4 rounded-full flex items-center justify-center z-10 shrink-0 mt-1",
-                             item.acao === 'retificacao' ? "bg-warning-container text-on-warning-container" :
-                             item.acao === 'erro' ? "bg-error-container text-on-error-container" :
-                             "bg-primary-container text-on-primary-container"
-                           )}>
-                             {item.acao === 'retificacao' ? <History size={8} /> : 
-                              item.acao === 'upload' ? <CloudUpload size={8} /> :
-                              item.acao === 'consolidacao' ? <Calendar size={8} /> :
-                              <CheckCircle2 size={8} />}
-                           </div>
-                           <div className="flex flex-col flex-1 gap-0.5">
-                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className={cn(
-                                    "text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded",
-                                    item.acao === 'retificacao' ? "bg-warning/10 text-warning" :
-                                    item.acao === 'upload' ? "bg-info/10 text-info" :
-                                    "bg-success/10 text-success"
-                                  )}>
-                                    {item.acao}
-                                  </span>
-                                  <p className="text-[10px] font-bold text-on-surface truncate max-w-[400px]">
-                                    {item.descricao}
-                                  </p>
-                                </div>
-                                <span className="text-[8px] text-outline font-mono">
-                                  {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                             </div>
-                             {item.evento && (
-                               <div className="text-[8px] text-secondary/70 flex gap-2 overflow-hidden items-center mt-0.5">
-                                 <span className="bg-surface-container-high px-1 rounded-sm border border-outline-variant/10">ID: {item.evento.eventoId.substring(0, 8)}...</span>
-                                 <span>{item.evento.tpEvento}</span>
-                                 <span>•</span>
-                                 <span>Ref: {item.evento.perApur}</span>
-                                 <span className="truncate">• {item.evento.trabalhador?.nome}</span>
-                               </div>
-                             )}
-                           </div>
-                         </div>
-                       ))}
-                    </div>
-                  )}
-               </div>
-            </div>
-         </div>
-         <div className={cn("col-span-1 lg:col-span-4 flex flex-col gap-lg transition-all", isUploading && "opacity-50 pointer-events-none")}>
-          <div className="bg-error/5 border border-error/20 p-6 rounded-sm">
-             <div className="flex items-center gap-2 text-error mb-4">
-                <AlertTriangle size={20} />
-                <h4 className="text-[11px] font-black uppercase tracking-widest">Pendências Cadastrais</h4>
-             </div>
-             <div className="flex flex-col gap-4 mb-6">
-                {summaryStats.unlinkedCpfs > 0 && (
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold text-error uppercase">Trabalhadores Não Identificados</span>
-                    <div className="flex flex-col gap-1 bg-white/50 p-2 rounded border border-error/10">
-                      {pendencies.unlinkedCpfs.slice(0, 3).map((p: any) => (
-                        <div key={p.cpfBenef} className="flex justify-between items-center text-[10px] font-mono">
-                          <span>CPF: {p.cpfBenef}</span>
-                          <span className="opacity-60">{p._count._all} eventos</span>
-                        </div>
-                      ))}
-                      {summaryStats.unlinkedCpfs > 3 && <span className="text-[9px] italic opacity-50">+ {summaryStats.unlinkedCpfs - 3} outros</span>}
-                    </div>
-                  </div>
-                )}
-                
-                {summaryStats.unlinkedCnpjs > 0 && (
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold text-error uppercase">Empregadores Não Identificados</span>
-                    <div className="flex flex-col gap-1 bg-white/50 p-2 rounded border border-error/10">
-                      {pendencies.unlinkedCnpjs.slice(0, 3).map((p: any) => (
-                        <div key={p.cnpjRaiz} className="flex justify-between items-center text-[10px] font-mono">
-                          <span>CNPJ Raiz: {p.cnpjRaiz}</span>
-                          <span className="opacity-60">{p._count._all} eventos</span>
-                        </div>
-                      ))}
-                      {summaryStats.unlinkedCnpjs > 3 && <span className="text-[9px] italic opacity-50">+ {summaryStats.unlinkedCnpjs - 3} outros</span>}
-                    </div>
-                  </div>
-                )}
 
-                {summaryStats.pendingErrors > 0 && (
-                  <p className="text-[11px] text-error leading-relaxed font-medium">
-                    Existem {summaryStats.pendingErrors} erros de processamento fiscal ativos.
-                  </p>
-                )}
-             </div>
-             <button 
-               onClick={() => router.push("/pendencias")}
-               disabled={isUploading || (summaryStats.unlinkedCpfs === 0 && summaryStats.unlinkedCnpjs === 0 && summaryStats.pendingErrors === 0)}
-               className="w-full py-2.5 bg-error text-white font-bold text-[10px] uppercase rounded-sm shadow-md shadow-error/20 hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed disabled:grayscale transition-all active:scale-[0.98]"
-             >
-                Cadastrar Entidades
-             </button>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-[10.5px] font-mono">
+                <thead>
+                  <tr className="border-b border-outline-variant text-[9px] text-[#1B365D] font-bold uppercase tracking-wider bg-neutral-50/50">
+                    <th className="py-2.5 px-3">Origem</th>
+                    <th className="py-2.5 px-3">Referência</th>
+                    <th className="py-2.5 px-3">Atividade / Descrição</th>
+                    <th className="py-2.5 px-3 text-right">Data/Hora</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.timeline.slice(0, 8).map((evt) => (
+                    <tr key={evt.id} className="border-b border-outline-variant/50 hover:bg-neutral-50/80 transition-colors">
+                      <td className="py-2 px-3 font-bold">
+                        <span className={cn(
+                          "text-[9px] px-1.5 py-0.5 rounded font-bold font-mono tracking-tighter uppercase",
+                          evt.retificador ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800"
+                        )}>
+                          {evt.tipo}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-neutral-500 font-bold">{evt.referencia}</td>
+                      <td className="py-2 px-3 text-neutral-700 truncate max-w-[280px]" title={evt.descricao}>
+                        {evt.descricao}
+                      </td>
+                      <td className="py-2 px-3 text-right text-neutral-400">
+                        {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-         </div>
-      </section>
+        )}
+
+        {/* BLOCO 7 — MAPA DE COMPETÊNCIAS */}
+        {preferences.widgets.includes("competencias") && (
+          <div className="lg:col-span-4 border border-outline-variant bg-white p-6 rounded-sm shadow-sm flex flex-col gap-4">
+            <div className="flex justify-between items-center pb-2 border-b border-outline-variant/60">
+              <h3 className="text-xs font-black text-[#1B365D] uppercase tracking-wider flex items-center gap-1.5">
+                <Calendar size={16} className="text-[#1B365D]" />
+                Compas. Fiscais
+              </h3>
+            </div>
+
+            {isLoadingCalendar ? (
+              <div className="flex flex-col items-center justify-center p-10 opacity-40">
+                <LoadingSpinner size="sm" />
+              </div>
+            ) : fiscalCalendar.length === 0 ? (
+              <p className="text-[10px] text-center text-secondary py-6 italic">Nenhum ano fiscal processado.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {fiscalCalendar.slice(0, 2).map((year: any) => (
+                  <div key={year.ano} className="border border-outline-variant/80 p-3 rounded bg-neutral-50 flex flex-col gap-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-black text-[#1B365D]">{year.ano}</span>
+                      <span className="text-[8px] bg-[#1B365D] text-white py-0.5 px-1.5 rounded font-bold font-mono">
+                        R$ {year.totalIrrf.toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+
+                    {/* Compacted Map of Competencies */}
+                    <div className="grid grid-cols-6 gap-1 bg-white p-1.5 rounded border border-outline-variant/50">
+                      {year.months.map((m: any) => (
+                        <div 
+                          key={m.periodo} 
+                          className={cn(
+                            "aspect-square rounded-[2px] flex flex-col items-center justify-center text-[7px] font-mono leading-none font-bold border",
+                            m.status === "ok" ? "bg-emerald-500/10 border-emerald-500/15 text-emerald-700" :
+                            m.status === "retificado" ? "bg-amber-100 border-amber-200 text-amber-700 animate-pulse" :
+                            "bg-neutral-100 border-neutral-200 text-neutral-300 opacity-20"
+                          )}
+                          title={`${m.periodo}: ${m.status.toUpperCase()}`}
+                        >
+                          <span>{m.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* BLOCO 8 — AÇÕES RÁPIDAS INTELIGENTES */}
+        {preferences.widgets.includes("acoes-rapidas") && (
+          <div className="lg:col-span-12 border border-outline-variant bg-white p-6 rounded-sm shadow-sm flex flex-col gap-4">
+            <h3 className="text-xs font-black text-[#1B365D] uppercase tracking-wider pb-3 border-b border-outline-variant/60">
+              ⚡ Centro de Ações Rápidas Inteligentes do Compliance
+            </h3>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+              
+              <button 
+                onClick={triggerXmlUpload}
+                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+              >
+                <PlusCircle size={18} className="group-hover:scale-110 transition-transform" />
+                Importar eSocial
+              </button>
+
+              <Link 
+                href="/reinf"
+                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+              >
+                <Upload size={18} className="group-hover:scale-110 transition-transform" />
+                Importar REINF
+              </Link>
+
+              <Link 
+                href="/reinf"
+                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+              >
+                <Sliders size={18} className="group-hover:scale-110 transition-transform" />
+                Cadastrar Prestador
+              </Link>
+
+              <Link 
+                href="/consolidacao"
+                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+              >
+                <Layers size={18} className="group-hover:scale-110 transition-transform" />
+                Consolidação Fiscal
+              </Link>
+
+              <Link 
+                href="/consolidacao"
+                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+              >
+                <Download size={18} className="group-hover:scale-110 transition-transform" />
+                Gerar DIRF Digital
+              </Link>
+
+              <Link 
+                href="/esocial"
+                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+              >
+                <Activity size={18} className="group-hover:scale-110 transition-transform" />
+                Auditoria Geral
+              </Link>
+
+              <Link 
+                href="/empregadores"
+                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+              >
+                <Building size={18} className="group-hover:scale-110 transition-transform" />
+                Empregadores
+              </Link>
+
+              <Link 
+                href="/trabalhadores"
+                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+              >
+                <UserCheck size={18} className="group-hover:scale-110 transition-transform" />
+                Trabalhadores S-5002
+              </Link>
+
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* COMPONENT WIDGET CONFIGURATION MODAL (PERSONALIZAÇÃO DE LAYOUT) */}
+      {showConfigModal && (
+        <div className="fixed inset-0 bg-neutral-900/60 flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white rounded-sm border border-outline-variant max-w-lg w-full p-6 shadow-xl flex flex-col gap-4 relative">
+            <button 
+              onClick={() => setShowConfigModal(false)}
+              className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 active:scale-95"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-2 pb-2 border-b border-outline-variant">
+              <Sliders size={20} className="text-[#1B365D]" />
+              <div>
+                <h3 className="text-sm font-black text-[#1B365D] uppercase tracking-wider">
+                  Personalizar Painel de Controle
+                </h3>
+                <p className="text-[10px] text-neutral-400">
+                  Defina os blocos e indicadores fiscais críticos visíveis no seu dashboard.
+                </p>
+              </div>
+            </div>
+
+            {/* Checkbox toggler for Blocks */}
+            <div className="flex flex-col gap-2.5">
+              <span className="text-[9px] font-bold text-secondary uppercase tracking-widest border-b border-outline-variant/30 pb-1">
+                Visualização de Blocos Estratégicos
+              </span>
+              <div className="grid grid-cols-2 gap-2 text-[10.5px]">
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.widgets.includes("visao-executiva")} 
+                    onChange={() => toggleWidget("visao-executiva")}
+                    className="accent-indigo-600 rounded"
+                  />
+                  Visão Executiva (KPIs Gerais)
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.widgets.includes("posicao-consolidada")} 
+                    onChange={() => toggleWidget("posicao-consolidada")}
+                    className="accent-indigo-600 rounded"
+                  />
+                  Posição Fiscal Consolidada
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.widgets.includes("consolidacao-anual")} 
+                    onChange={() => toggleWidget("consolidacao-anual")}
+                    className="accent-indigo-600 rounded"
+                  />
+                  Consolidação Fiscal Anual (Chart)
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.widgets.includes("esocial-reinf")} 
+                    onChange={() => toggleWidget("esocial-reinf")}
+                    className="accent-indigo-600 rounded"
+                  />
+                  Fontes eSocial x REINF (Donut)
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.widgets.includes("saude-base")} 
+                    onChange={() => toggleWidget("saude-base")}
+                    className="accent-indigo-600 rounded"
+                  />
+                  Saúde e Governança da Base
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.widgets.includes("alertas-fiscais")} 
+                    onChange={() => toggleWidget("alertas-fiscais")}
+                    className="accent-indigo-600 rounded"
+                  />
+                  Alertas Fiscais Inteligentes
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.widgets.includes("ultimos-processamentos")} 
+                    onChange={() => toggleWidget("ultimos-processamentos")}
+                    className="accent-indigo-600 rounded"
+                  />
+                  Logs de Processamentos
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.widgets.includes("competencias")} 
+                    onChange={() => toggleWidget("competencias")}
+                    className="accent-indigo-600 rounded"
+                  />
+                  Mapa de Competências
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none col-span-2 text-indigo-700 font-extrabold">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.widgets.includes("acoes-rapidas")} 
+                    onChange={() => toggleWidget("acoes-rapidas")}
+                    className="accent-indigo-600 rounded"
+                  />
+                  Menu de Ações Rápidas Inteligentes
+                </label>
+              </div>
+
+              {/* Toggler filters for specific metrics inside Piece position */}
+              <span className="text-[9px] font-bold text-secondary uppercase tracking-widest border-b border-outline-variant/30 pb-1 mt-3">
+                Filtros e Visualização de Métricas (KPIs Principais)
+              </span>
+              <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.show_kpi_irrf} 
+                    onChange={() => toggleKPI("show_kpi_irrf")}
+                    className="accent-emerald-600 rounded"
+                  />
+                  IRRF Retido
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.show_kpi_rendimentos} 
+                    onChange={() => toggleKPI("show_kpi_rendimentos")}
+                    className="accent-emerald-600 rounded"
+                  />
+                  Rendimentos
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.show_kpi_pendencias} 
+                    onChange={() => toggleKPI("show_kpi_pendencias")}
+                    className="accent-rose-600 rounded"
+                  />
+                  Inconsistências
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.show_kpi_empregadores} 
+                    onChange={() => toggleKPI("show_kpi_empregadores")}
+                    className="accent-sky-600 rounded"
+                  />
+                  Empregadores
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.show_kpi_trabalhadores} 
+                    onChange={() => toggleKPI("show_kpi_trabalhadores")}
+                    className="accent-sky-600 rounded"
+                  />
+                  Trabalhadores
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={preferences.show_kpi_prestadores} 
+                    onChange={() => toggleKPI("show_kpi_prestadores")}
+                    className="accent-sky-600 rounded"
+                  />
+                  Prestadores
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center border-t border-outline-variant pt-4 mt-2">
+              <button 
+                onClick={handleResetLayout}
+                className="text-[10px] font-bold text-rose-700 hover:underline uppercase tracking-wider"
+              >
+                Restaurar Padrão de Sistemas
+              </button>
+
+              <button 
+                onClick={() => setShowConfigModal(false)}
+                className="bg-[#1B365D] hover:bg-[#152a49] text-white text-[10px] font-black uppercase tracking-wider py-2 px-6 rounded-xs active:scale-95 transition-all shadow-md"
+              >
+                Concluir Ajustes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

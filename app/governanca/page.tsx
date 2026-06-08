@@ -28,11 +28,16 @@ import {
   Globe,
   Gauge,
   AlertTriangle,
-  Compass
+  Compass,
+  History,
+  CloudUpload,
+  Calendar,
+  CheckCircle2
 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 interface DynamicProfile {
   id: string;
@@ -85,6 +90,10 @@ const DETAILED_MODULES = [
   { key: "trabalhadores", label: "Cadastro de Trabalhadores" },
   { key: "operadoras", label: "Operadoras de Saúde" },
   { key: "consolidacao", label: "Consolidação Fiscal" },
+  { key: "codigos", label: "Códigos de Receita RFB" },
+  { key: "usuarios", label: "Controle de Usuários" },
+  { key: "logs", label: "Histórico e Logs Técnicos" },
+  { key: "configs", label: "Configuração e Licenciamento" },
 ];
 
 const DETAILED_ACTIONS = [
@@ -99,7 +108,21 @@ const formatPermissionKey = (key: string) => {
     const parts = key.split("_");
     const mod = parts[0];
     const act = parts[1];
-    const modLabel = mod === "esocial" ? "eSocial" : mod === "reinf" ? "REINF" : mod === "empresas" ? "Empregadores" : mod === "trabalhadores" ? "Trabalhadores" : mod === "operadoras" ? "Operadoras" : mod === "consolidacao" ? "Consolidação" : mod;
+    
+    let modLabel = mod;
+    switch (mod) {
+      case "esocial": modLabel = "eSocial"; break;
+      case "reinf": modLabel = "REINF"; break;
+      case "empresas": modLabel = "Empregadores"; break;
+      case "trabalhadores": modLabel = "Trabalhadores"; break;
+      case "operadoras": modLabel = "Operadoras"; break;
+      case "consolidacao": modLabel = "Consolidação"; break;
+      case "codigos": modLabel = "Cd. Receita"; break;
+      case "usuarios": modLabel = "Usuários"; break;
+      case "logs": modLabel = "Logs"; break;
+      case "configs": modLabel = "Config/Licença"; break;
+    }
+    
     return `${modLabel}: ${act.charAt(0).toUpperCase() + act.slice(1)}`;
   }
   const existing = PERMISSION_KEYS.find(p => p.key === key);
@@ -188,6 +211,10 @@ export default function GovernanceDashboard() {
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [companySearch, setCompanySearch] = useState("");
 
+  // Processing Timeline history state
+  const [history, setHistory] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
   const isSuperAdmin = user?.perfil.toUpperCase() === "SUPER_ADMIN";
   const isAdmin = user?.perfil.toUpperCase() === "ADMIN";
 
@@ -253,6 +280,15 @@ export default function GovernanceDashboard() {
         const d = await rfbRes.json();
         setCodigosFiscais(d);
       }
+
+      // 9. Processing Timeline and Audit
+      setIsLoadingHistory(true);
+      const histRes = await fetch("/api/fiscal/history");
+      if (histRes.ok) {
+        const d = await histRes.json();
+        setHistory(d);
+      }
+      setIsLoadingHistory(false);
     } catch (e) {
       console.error("Erro ao carregar dados de governança:", e);
     } finally {
@@ -846,67 +882,154 @@ export default function GovernanceDashboard() {
           <>
             {/* OVERVIEW TAB */}
             {activeTab === "overview" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                {/* Visual state map */}
-                <div className="border border-outline-variant bg-white p-6 rounded-sm flex flex-col gap-4">
-                  <h3 className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2 pb-3 border-b border-outline-variant/60">
-                    <Gauge size={16} strokeWidth={2.5} />
-                    Status do Servidor Compliance
-                  </h3>
+              <div className="flex flex-col gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                  {/* Visual state map */}
+                  <div className="border border-outline-variant bg-white p-6 rounded-sm flex flex-col gap-4">
+                    <h3 className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2 pb-3 border-b border-outline-variant/60">
+                      <Gauge size={16} strokeWidth={2.5} />
+                      Status do Servidor Compliance
+                    </h3>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 bg-surface-variant/40 rounded-sm border border-outline-variant/50 flex flex-col gap-1">
-                      <span className="text-[10px] text-secondary font-extrabold uppercase">Espaço Provisionado</span>
-                      <span className="text-sm font-bold text-primary">PostgreSQL AWS Cloud SQL</span>
-                      <span className="text-xs text-emerald-700 font-extrabold mt-1">✓ Integridade Conectada</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-4 bg-surface-variant/40 rounded-sm border border-outline-variant/50 flex flex-col gap-1">
+                        <span className="text-[10px] text-secondary font-extrabold uppercase">Espaço Provisionado</span>
+                        <span className="text-sm font-bold text-primary">PostgreSQL AWS Cloud SQL</span>
+                        <span className="text-xs text-emerald-700 font-extrabold mt-1">✓ Integridade Conectada</span>
+                      </div>
+
+                      <div className="p-4 bg-surface-variant/40 rounded-sm border border-outline-variant/50 flex flex-col gap-1">
+                        <span className="text-[10px] text-secondary font-extrabold uppercase">Banda e Motor Fiscal</span>
+                        <span className="text-sm font-bold text-primary">S-5002 Engine v14.2</span>
+                        <span className="text-xs text-emerald-700 font-extrabold mt-1">● Ativo & Pronto</span>
+                      </div>
                     </div>
 
-                    <div className="p-4 bg-surface-variant/40 rounded-sm border border-outline-variant/50 flex flex-col gap-1">
-                      <span className="text-[10px] text-secondary font-extrabold uppercase">Banda e Motor Fiscal</span>
-                      <span className="text-sm font-bold text-primary">S-5002 Engine v14.2</span>
-                      <span className="text-xs text-emerald-700 font-extrabold mt-1">● Ativo & Pronto</span>
+                    <div className="p-4 border border-[#e1e2e6] rounded-sm bg-[#faf9f9]/50">
+                      <h4 className="text-xs font-black text-primary uppercase tracking-wider mb-2">Resumo das Operações Fiscais</h4>
+                      <div className="flex gap-4 items-center justify-between mt-2 pt-2 border-t border-dotted border-outline-variant/80">
+                        <span className="text-xs text-secondary font-medium">Eventos S-5002 Processados</span>
+                        <span className="text-sm font-black text-emerald-700">✓ {stats.processados} xmls</span>
+                      </div>
+                      <div className="flex gap-4 items-center justify-between mt-1">
+                        <span className="text-xs text-secondary font-medium">Eventos com Erros técnicos</span>
+                        <span className="text-sm font-black text-red-600">✗ {stats.erros} xmls</span>
+                      </div>
+                      <div className="flex gap-4 items-center justify-between mt-1">
+                        <span className="text-xs text-secondary font-medium">Aguardando Auditoria</span>
+                        <span className="text-sm font-black text-amber-600">● {stats.pendentes} xmls</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="p-4 border border-[#e1e2e6] rounded-sm bg-[#faf9f9]/50">
-                    <h4 className="text-xs font-black text-primary uppercase tracking-wider mb-2">Resumo das Operações Fiscais</h4>
-                    <div className="flex gap-4 items-center justify-between mt-2 pt-2 border-t border-dotted border-outline-variant/80">
-                      <span className="text-xs text-secondary font-medium">Eventos S-5002 Processados</span>
-                      <span className="text-sm font-black text-emerald-700">✓ {stats.processados} xmls</span>
-                    </div>
-                    <div className="flex gap-4 items-center justify-between mt-1">
-                      <span className="text-xs text-secondary font-medium">Eventos com Erros técnicos</span>
-                      <span className="text-sm font-black text-red-600">✗ {stats.erros} xmls</span>
-                    </div>
-                    <div className="flex gap-4 items-center justify-between mt-1">
-                      <span className="text-xs text-secondary font-medium">Aguardando Auditoria</span>
-                      <span className="text-sm font-black text-amber-600">● {stats.pendentes} xmls</span>
+                  <div className="border border-outline-variant bg-white p-6 rounded-sm flex flex-col gap-4">
+                    <h3 className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2 pb-3 border-b border-outline-variant/60">
+                      <Compass size={16} />
+                      Diretrizes Operacionais do Perfil
+                    </h3>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-start gap-3 p-3 bg-indigo-50/20 border border-indigo-125 rounded-sm">
+                        <Shield className="text-indigo-700 mt-1 shrink-0" size={18} />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-extrabold text-indigo-900">Seu Perfil Atual: {user?.perfil}</span>
+                          <p className="text-[11px] text-indigo-750 mt-1 leading-normal">
+                            {isSuperAdmin 
+                              ? "Como SUPER_ADMIN, você possui controle irrestrito. Você é autorizado a gerenciar permissões, configurar licenciamentos globals, excluir empresas e simular/impersonar usuários." 
+                              : "Administradores (ADMIN) gerenciam empregadores e usuários, porém estão restritos quanto a alteração de licenças, exclusão de dados corporativos ou simulação de SuperAdmins."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 text-xs leading-normal font-medium text-secondary p-3 bg-surface border border-outline-variant/50 rounded-sm">
+                        <span className="font-bold text-primary block mb-1">Avisos Importantes:</span>
+                        1. Toda redefinição de perfil dinâmico é propagada em cache.<br/>
+                        2. Ações críticas (como exclusão de bancos/empresas) criam logs imutáveis na auditoria de logs técnicos.
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="border border-outline-variant bg-white p-6 rounded-sm flex flex-col gap-4">
-                  <h3 className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2 pb-3 border-b border-outline-variant/60">
-                    <Compass size={16} />
-                    Diretrizes Operacionais do Perfil
-                  </h3>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-start gap-3 p-3 bg-indigo-50/20 border border-indigo-120 rounded-sm">
-                      <Shield className="text-indigo-700 mt-1 shrink-0" size={18} />
-                      <div className="flex flex-col">
-                        <span className="text-xs font-extrabold text-indigo-900">Seu Perfil Atual: {user?.perfil}</span>
-                        <p className="text-[11px] text-indigo-750 mt-1 leading-normal">
-                          {isSuperAdmin 
-                            ? "Como SUPER_ADMIN, você possui controle irrestrito. Você é autorizado a gerenciar permissões, configurar licenciamentos globals, excluir empresas e simular/impersonar usuários." 
-                            : "Administradores (ADMIN) gerenciam empregadores e usuários, porém estão restritos quanto a alteração de licenças, exclusão de dados corporativos ou simulação de SuperAdmins."}
-                        </p>
-                      </div>
-                    </div>
+                {/* Timeline Card */}
+                <div className="border border-outline-variant bg-white p-6 rounded-sm flex flex-col gap-4 shadow-sm animate-fadeIn">
+                  <div className="flex justify-between items-center pb-3 border-b border-outline-variant/60">
+                    <h3 className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2">
+                      <History size={16} className="text-[#1B365D]" />
+                      Timeline de Processamento e Auditoria Fiscal Geral
+                    </h3>
+                    <Link 
+                      href="/esocial" 
+                      className="text-[9px] font-black text-[#1B365D] hover:underline uppercase tracking-wider"
+                    >
+                      Ver Auditoria S-5002
+                    </Link>
+                  </div>
 
-                    <div className="mt-2 text-xs leading-normal font-medium text-secondary p-3 bg-surface border border-outline-variant/50 rounded-sm">
-                      <span className="font-bold text-primary block mb-1">Avisos Importantes:</span>
-                      1. Toda redefinição de perfil dinâmico é propagada em cache.<br/>
-                      2. Ações críticas (como exclusão de bancos/empresas) criam logs imutáveis na auditoria de logs técnicos.
+                  <div className="h-[400px] flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto pr-2 no-scrollbar">
+                      {isLoadingHistory ? (
+                        <div className="h-full flex items-center justify-center opacity-50 py-12">
+                          <LoadingSpinner size="sm" />
+                        </div>
+                      ) : history.length === 0 ? (
+                        <div className="h-full flex items-center justify-center italic text-xs text-secondary/50 py-12">
+                          Fluxo de Auditoria será populado após processamento de XMLs...
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2.5">
+                          {history.map((item, idx) => (
+                            <div key={item.id} className="flex gap-4 relative group py-2 hover:bg-neutral-50/50 rounded-sm px-2.5 transition-colors border border-transparent hover:border-outline-variant/20">
+                              {idx !== history.length - 1 && (
+                                <div className="absolute left-[23px] top-8 bottom-[-12px] w-[1px] bg-slate-200 border-dotted border-l" />
+                              )}
+                              <div className={cn(
+                                "w-7 h-7 rounded-full flex items-center justify-center z-10 shrink-0 border shadow-xs",
+                                item.acao === 'retificacao' ? "bg-amber-50 border-amber-200 text-amber-700" :
+                                item.acao === 'erro' ? "bg-red-50 border-red-200 text-red-600" :
+                                "bg-indigo-50 border-indigo-200 text-indigo-700"
+                              )}>
+                                {item.acao === 'retificacao' ? <History size={12} /> : 
+                                 item.acao === 'upload' ? <CloudUpload size={12} /> :
+                                 item.acao === 'consolidacao' ? <Calendar size={12} /> :
+                                 <CheckCircle2 size={12} />}
+                              </div>
+                              <div className="flex flex-col flex-1 gap-1">
+                                <div className="flex items-center justify-between gap-4 flex-wrap">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={cn(
+                                      "text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded-xs font-mono font-bold",
+                                      item.acao === 'retificacao' ? "bg-amber-100 text-amber-800 border border-amber-205" :
+                                      item.acao === 'upload' ? "bg-blue-100 text-blue-800 border border-blue-205" :
+                                      "bg-emerald-100 text-emerald-800 border border-emerald-255"
+                                    )}>
+                                      {item.acao}
+                                    </span>
+                                    <p className="text-[11px] font-black text-on-surface truncate max-w-md" title={item.descricao}>
+                                      {item.descricao}
+                                    </p>
+                                  </div>
+                                  <span className="text-[9px] text-secondary font-semibold font-mono bg-neutral-100 px-1.5 py-0.5 rounded-sm">
+                                    {new Date(item.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                  </span>
+                                </div>
+                                {item.evento && (
+                                  <div className="text-[9px] text-secondary/80 flex flex-wrap gap-2 overflow-hidden items-center mt-1">
+                                    <span className="bg-surface px-1.5 py-0.5 rounded-xs border border-outline-variant/30 font-mono">ID: {item.evento.eventoId.substring(0, 10)}...</span>
+                                    <span className="font-extrabold uppercase bg-neutral-150 px-1.5 py-0.5 text-[8.5px] rounded-xs">{item.evento.tpEvento}</span>
+                                    <span>•</span>
+                                    <span className="font-semibold">Período: {item.evento.perApur}</span>
+                                    {item.evento.trabalhador?.nome && (
+                                      <>
+                                        <span>•</span>
+                                        <span className="truncate max-w-[200px] text-primary font-bold">{item.evento.trabalhador.nome}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1197,7 +1320,7 @@ export default function GovernanceDashboard() {
                       </button>
                       <button 
                         type="submit"
-                        className="bg-[#1B365D] hover:bg-[#152a49] text-white text-xs font-bold uppercase tracking-wider py-2 px-6 rounded-sm active:scale-95 transition-all shadow-md shadow-indigo-950/10"
+                        className="btn-primary py-2 px-6 text-xs font-bold uppercase tracking-wider text-white"
                       >
                         Salvar Alterações
                       </button>
