@@ -164,7 +164,7 @@ export async function GET(req: NextRequest) {
     if (totalPrestadores === 0 || unlinkedCnpjs.length > 0) {
       alerts.push({ id: "a1", text: "Prestador encontrado no XML e não cadastrado no sistema", type: "warning" });
     }
-    const unlistedReceitas = await prisma.esocialTotApurMen.findFirst({
+    const unlistedReceitas = await prisma.s5002TotApurMen.findFirst({
       where: { crMen: { notIn: ["056107", "056108", "058806", "353301", "356201"] } }
     });
     if (unlistedReceitas) {
