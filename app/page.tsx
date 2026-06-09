@@ -56,6 +56,7 @@ import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
 interface DashboardStats {
+  ano?: string;
   indicators: {
     empregadores: number;
     trabalhadores: number;
@@ -422,7 +423,7 @@ export default function Dashboard() {
                     Enterprise Health Status
                   </span>
                   <span className="text-white/60 text-[10px] font-mono leading-none">
-                    Atualizado em tempo real • Competência 2025
+                    Atualizado em tempo real • Competência {stats?.ano || "2025"}
                   </span>
                 </div>
                 <h2 className="text-lg font-black tracking-tight text-white uppercase select-none">
@@ -432,7 +433,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-3">
                 <div className="text-right flex flex-col">
                   <span className="text-[9px] text-white/50 font-black uppercase">Consolidação</span>
-                  <span className="text-xs font-mono font-bold">Base RFB 2025</span>
+                  <span className="text-xs font-mono font-bold">Base RFB {stats?.ano || "2025"}</span>
                 </div>
                 <button 
                   onClick={triggerXmlUpload}
@@ -606,7 +607,7 @@ export default function Dashboard() {
                 <span className="text-[8px] font-black tracking-widest text-[#1B365D] uppercase font-mono">Competência consolidada</span>
                 <h3 className="text-xs font-black text-[#1B365D] uppercase tracking-wider mt-0.5 flex items-center gap-2">
                   <TrendingUp size={16} className="text-[#1B365D]" />
-                  IRRF Consolidado Executivo (Série 2025)
+                  IRRF Consolidado Executivo (Série {stats?.ano || "2025"})
                 </h3>
               </div>
               <span className="text-[10px] font-bold bg-[#1B365D]/5 text-[#1B365D] uppercase px-2 py-0.5 rounded font-mono border border-indigo-100">

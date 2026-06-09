@@ -229,6 +229,44 @@ async function run() {
   await prisma.s5002Evento.createMany({ data: s5002Eventos });
   await prisma.s5002ConsolidadoPeriodo.createMany({ data: s5002Periodos });
 
+  // Create DmDevs and InfoIR records for isentos
+  console.log("Inserindo em lote S5002DmDev e S5002InfoIR para rendimentos isentos...");
+  const s5002DmDevs: any[] = [];
+  const s5002InfoIRs: any[] = [];
+
+  const totalIsentoToDistribute = 174398.00;
+  let accumulatedIsento = 0;
+  const countEvents = s5002Eventos.length; // 60
+
+  s5002Eventos.forEach((evt, idx) => {
+    const dmDevId = `s5_dmdev_${idx}`;
+    
+    // Distribute isento
+    let valIsento = Math.round((totalIsentoToDistribute / countEvents) * 100) / 100;
+    if (idx === countEvents - 1) {
+      valIsento = Number((totalIsentoToDistribute - accumulatedIsento).toFixed(2));
+    } else {
+      accumulatedIsento += valIsento;
+    }
+
+    s5002DmDevs.push({
+      id: dmDevId,
+      s5002EventoId: evt.id,
+      ideDmDev: "dm_1",
+      perRef: evt.perApur,
+    });
+
+    s5002InfoIRs.push({
+      id: `s5_infoir_${idx}`,
+      dmDevId: dmDevId,
+      tpInfoIR: "79", // "79" -> Outras isenções
+      valor: new Decimal(valIsento),
+    });
+  });
+
+  await prisma.s5002DmDev.createMany({ data: s5002DmDevs });
+  await prisma.s5002InfoIR.createMany({ data: s5002InfoIRs });
+
   // Create Annual consolidations matching Worker Accumulates
   console.log("Inserindo Consolidado Anual para DIRF...");
   const s5002Anuais = trabalhadores.map(worker => {

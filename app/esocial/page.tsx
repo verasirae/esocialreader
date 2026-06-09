@@ -55,6 +55,41 @@ export default function EsocialTablesPage() {
 function EsocialTablesContent() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState("Auditoria S-5002");
+
+  const tabMetadata: Record<string, { title: string; subtitle: string }> = {
+    "Auditoria S-5002": {
+      title: "Auditoria S-5002",
+      subtitle: "Audite as bases de cálculo e IRRF contra os registros oficiais do governo.",
+    },
+    "Conferência DIRF": {
+      title: "Conferência Anual DIRF",
+      subtitle: "Verifique os acumulados mensais consolidados por trabalhador e dependente para a DIRF.",
+    },
+    "Consolidação Anual": {
+      title: "Consolidação Anual S-5002",
+      subtitle: "Gere e consolide os lastros para os informes de rendimentos anuais.",
+    },
+    "Divergências Fiscais": {
+      title: "Divergências Fiscais",
+      subtitle: "Monitore e saneie inconsistências de cálculos e cadastros identificadas pelo motor fiscal.",
+    },
+    "Importar XML": {
+      title: "Importação de XML S-5002",
+      subtitle: "Envie novos lotes de arquivos S-5002 para auditorar e consolidar as bases.",
+    },
+    "Tabelas": {
+      title: "Tabelas eSocial",
+      subtitle: "Consulte as tabelas oficiais e parametrize o motor de interpretação de tributos.",
+    },
+    "Histórico": {
+      title: "Histórico de Processamentos",
+      subtitle: "Consulte os logs de importação, retificações e fechamentos executados no sistema.",
+    },
+    "Relatórios": {
+      title: "Relatórios Fiscais",
+      subtitle: "Exporte relatórios consolidados e analíticos do portal de compliance do eSocial.",
+    },
+  };
   
   // Novas variáveis para Conferência
   const [conferenciaData, setConferenciaData] = useState<any[]>([]);
@@ -694,8 +729,10 @@ function EsocialTablesContent() {
                     value={selectedAno}
                     onChange={(e) => setSelectedAno(e.target.value)}
                   >
-                    {Array.isArray(periodosDisponiveis) && periodosDisponiveis.map(p => p && p.anoCalendario !== undefined && (
-                      <option key={p.id} value={p.anoCalendario.toString()}>{p.anoCalendario}</option>
+                    {Array.isArray(periodosDisponiveis) && Array.from(new Set(
+                      periodosDisponiveis.map(p => p?.anoCalendario).filter(v => v !== undefined && v !== null)
+                    )).map(ano => (
+                      <option key={ano} value={ano.toString()}>{ano}</option>
                     ))}
                   </select>
                 </div>
@@ -1260,8 +1297,10 @@ function EsocialTablesContent() {
                 onChange={(e) => setSelectedPeriodo(e.target.value)}
               >
                 <option value="">Selecionar Período</option>
-                {stats?.periodos?.map((p: any) => p && (
-                  <option key={p.id} value={p.id}>{p.anoCalendario}</option>
+                {Array.isArray(stats?.periodos) && Array.from(new Set(
+                  stats.periodos.map((p: any) => p?.anoCalendario).filter((ano: any) => ano !== undefined && ano !== null)
+                )).map((ano: any) => (
+                  <option key={ano} value={`${ano}-01`}>{ano}</option>
                 ))}
               </select>
               <button 
@@ -1425,7 +1464,13 @@ function EsocialTablesContent() {
                   auditData.map((event: any) => (
                     <tr key={event.id} className="hover:bg-surface-container/30 transition-all group">
                       <td className="px-lg py-5 text-sm font-bold text-on-surface">
-                        {new Date(event.competencia).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric', timeZone: 'UTC' })}
+                        {event.perApur && event.perApur.includes("-") ? 
+                          `${event.perApur.split("-")[1]}/${event.perApur.split("-")[0]}` : 
+                          (event.competencia && event.competencia.includes("-") ? 
+                            `${event.competencia.split("-")[1]}/${event.competencia.split("-")[0]}` : 
+                            (event.perApur || event.competencia || "N/A")
+                          )
+                        }
                       </td>
                       <td className="px-lg py-5">
                          <div className="flex flex-col">
@@ -1982,21 +2027,21 @@ function EsocialTablesContent() {
       )}
 
       {/* Top Header Section */}
-      <div className="flex items-center justify-between border-b border-outline-variant bg-white px-8 -mx-8 -mt-8 py-6 h-auto min-h-24 sticky top-0 z-30 shadow-sm transition-all">
-        <div className="flex items-center gap-1">
-          <div className="relative">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border border-outline-variant bg-white px-6 py-4 xl:py-6 h-auto sticky top-0 z-30 shadow-sm transition-all rounded-sm">
+        <div className="flex items-center gap-1 w-full xl:w-auto">
+          <div className="relative w-full xl:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" size={16} />
             <input 
               type="text" 
               placeholder="Buscar código ou rubrica..." 
-              className="bg-surface pl-10 pr-4 py-2 w-80 text-sm outline-none focus:ring-1 focus:ring-primary rounded-sm transition-all"
+              className="bg-surface pl-10 pr-4 py-2 w-full text-sm outline-none focus:ring-1 focus:ring-primary rounded-sm transition-all"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
         </div>
 
-        <nav className="flex items-center h-full">
+        <nav className="flex items-center gap-1 overflow-x-auto whitespace-nowrap max-w-full w-full xl:w-auto py-1 xl:py-0 scrollbar-none scroll-smooth">
           {["Auditoria S-5002", "Conferência DIRF", "Consolidação Anual", "Divergências Fiscais", "Importar XML", "Tabelas", "Histórico", "Relatórios"].map((tab) => (
             <button
               key={tab}
@@ -2005,40 +2050,42 @@ function EsocialTablesContent() {
                 setCurrentPage(1);
               }}
               className={cn(
-                "px-6 h-full text-sm font-semibold relative transition-colors",
-                activeTab === tab ? "text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1 after:bg-primary" : "text-secondary hover:text-on-surface"
+                "px-4 xl:px-6 py-2.5 text-sm font-semibold relative transition-all rounded-sm shrink-0",
+                activeTab === tab ? "text-primary bg-primary/5 font-extrabold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:bg-primary" : "text-secondary hover:text-on-surface hover:bg-surface/50"
               )}
             >
               {tab}
             </button>
           ))}
         </nav>
-
-        <div className="flex items-center gap-4">
-           <div className="w-8 h-8 rounded-full bg-primary-container text-white flex items-center justify-center font-bold text-xs">JD</div>
-        </div>
       </div>
 
       {/* Main Content Title */}
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold text-on-surface tracking-tight">Tabelas eSocial</h1>
-          <p className="text-sm text-secondary font-medium mt-1">Consulte as tabelas oficiais e parametrize o motor de interpretação de tributos.</p>
+          <h1 className="text-3xl font-extrabold text-on-surface tracking-tight">
+            {tabMetadata[activeTab]?.title || "Tabelas eSocial"}
+          </h1>
+          <p className="text-sm text-secondary font-medium mt-1">
+            {tabMetadata[activeTab]?.subtitle || "Consulte as tabelas oficiais e parametrize o motor de interpretação de tributos."}
+          </p>
         </div>
-        <div className="flex gap-3">
-          <button 
-            className="btn-outline flex items-center gap-2 bg-white" 
-            onClick={() => window.open(`/api/esocial/export?tableId=${selectedTable}`, "_blank")}
-          >
-            <Download size={16} />
-            <span>Exportar Tudo</span>
-          </button>
-          <button type="button" className="btn-primary flex items-center gap-2" onClick={() => document.getElementById("header-upload")?.click()}>
-            <Plus size={16} />
-            <span>Importar CSV</span>
-          </button>
-          <input id="header-upload" type="file" className="hidden" onChange={(e) => handleFileUpload(e, selectedTable)} />
-        </div>
+        {activeTab === "Tabelas" && (
+          <div className="flex gap-3">
+            <button 
+              className="btn-outline flex items-center gap-2 bg-white" 
+              onClick={() => window.open(`/api/esocial/export?tableId=${selectedTable}`, "_blank")}
+            >
+              <Download size={16} />
+              <span>Exportar Tudo</span>
+            </button>
+            <button type="button" className="btn-primary flex items-center gap-2" onClick={() => document.getElementById("header-upload")?.click()}>
+              <Plus size={16} />
+              <span>Importar CSV</span>
+            </button>
+            <input id="header-upload" type="file" className="hidden" onChange={(e) => handleFileUpload(e, selectedTable)} />
+          </div>
+        )}
       </div>
 
       {renderContent()}

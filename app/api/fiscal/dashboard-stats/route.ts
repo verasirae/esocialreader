@@ -38,6 +38,60 @@ export async function GET(req: NextRequest) {
     });
     const totalInconsistencies = esocialErrors + reinfErrors + unlinkedCpfs.length + unlinkedCnpjs.length;
 
+    // Dynamic target year resolution based on record density
+    const esocialPeriods = await prisma.s5002ConsolidadoPeriodo.findMany({
+      where: { ativo: true },
+      select: { periodo: true }
+    });
+
+    let targetYear = "2025";
+    if (esocialPeriods.length > 0) {
+      const yearCounts: Record<string, number> = {};
+      for (const p of esocialPeriods) {
+        const year = p.periodo.substring(0, 4);
+        if (/^\d{4}$/.test(year)) {
+          yearCounts[year] = (yearCounts[year] || 0) + 1;
+        }
+      }
+      
+      let maxYear = "2025";
+      let maxCount = 0;
+      for (const [y, count] of Object.entries(yearCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          maxYear = y;
+        }
+      }
+      targetYear = maxYear;
+    } else {
+      const latestEsocial = await prisma.esocialEvento.findFirst({
+        where: { ativo: true },
+        orderBy: { perApur: "desc" },
+        select: { perApur: true }
+      });
+      const latestReinf = await prisma.reinfEvento.findFirst({
+        where: { ativo: true },
+        orderBy: { perApur: "desc" },
+        select: { perApur: true }
+      });
+
+      const yearsFound: string[] = [];
+      if (latestEsocial?.perApur) {
+        const y = latestEsocial.perApur.substring(0, 4);
+        if (/^\d{4}$/.test(y)) yearsFound.push(y);
+      }
+      if (latestReinf?.perApur) {
+        const y = latestReinf.perApur.substring(0, 4);
+        if (/^\d{4}$/.test(y)) yearsFound.push(y);
+      }
+      if (yearsFound.length > 0) {
+        yearsFound.sort();
+        targetYear = yearsFound[yearsFound.length - 1];
+      } else {
+        targetYear = String(new Date().getFullYear());
+      }
+    }
+
     // Sum consolidated amounts from database
     const esocialSums = await prisma.s5002ConsolidadoAnual.aggregate({
       _sum: {
@@ -57,17 +111,28 @@ export async function GET(req: NextRequest) {
       }
     });
 
+    // Sum S5002InfoIR dynamically for standard non-taxable / exempt income (rendimentos isentos)
+    const isentoCodes = ["70", "71", "72", "73", "74", "75", "76", "77", "78", "79", "700", "701", "7950", "7956"];
+    const isentosSumObj = await prisma.s5002InfoIR.aggregate({
+      where: {
+        tpInfoIR: { in: isentoCodes }
+      },
+      _sum: {
+        valor: true
+      }
+    });
+
     // Determine values strictly from active database values
     const rendimentos = Number(esocialSums._sum.vlrRendTrib || 0);
     const deducoes = Number(esocialSums._sum.vlrPensao || 0) + Number(esocialSums._sum.vlrPlanoSaude || 0) + Number(esocialSums._sum.vlrDependentes || 0);
     const irrfEsocial = Number(esocialSums._sum.vlrIrrf || 0);
     const irrfReinf = Number(reinfSums._sum.vlrCRMenInf || 0);
-    const rendimentosIsentos = 174398.00; // standard non-taxable income
+    const rendimentosIsentos = Number(isentosSumObj._sum.valor || 0);
     const totalConsolidado = irrfEsocial + irrfReinf;
 
     // Fetch active monthly periods and build the monthlySeries dynamically
     const activeMonthlyPeriods = await prisma.s5002ConsolidadoPeriodo.findMany({
-      where: { ativo: true, periodo: { startsWith: "2025-" } },
+      where: { ativo: true, periodo: { startsWith: `${targetYear}-` } },
       select: {
         periodo: true,
         vlrRendTrib: true,
@@ -76,7 +141,7 @@ export async function GET(req: NextRequest) {
     });
 
     const activeReinfRecords = await prisma.reinfR4020CRMen.findMany({
-      where: { r4020: { r4020Evento: { perApur: { startsWith: "2025-" } } } },
+      where: { r4020: { r4020Evento: { perApur: { startsWith: `${targetYear}-` } } } },
       select: {
         vlrCRMenInf: true,
         r4020: {
@@ -93,7 +158,7 @@ export async function GET(req: NextRequest) {
 
     const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     const monthlySeries = monthNames.map((name, i) => {
-      const periodKey = `2025-${(i + 1).toString().padStart(2, "0")}`;
+      const periodKey = `${targetYear}-${(i + 1).toString().padStart(2, "0")}`;
       
       const esocialMatch = activeMonthlyPeriods.filter(p => p.periodo === periodKey);
       const rendSum = esocialMatch.reduce((sum, p) => sum + Number(p.vlrRendTrib), 0);
@@ -114,14 +179,9 @@ export async function GET(req: NextRequest) {
       where: { ativo: true },
       take: 20,
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        tpEvento: true,
-        perApur: true,
-        createdAt: true,
-        status: true,
-        indRetif: true,
-        empresa: { select: { razaoSocial: true } }
+      include: {
+        empresa: { select: { razaoSocial: true } },
+        trabalhador: { select: { nome: true } }
       }
     });
 
@@ -129,42 +189,69 @@ export async function GET(req: NextRequest) {
       where: { ativo: true },
       take: 20,
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        tpEvento: true,
-        perApur: true,
-        createdAt: true,
-        status: true,
-        indRetif: true,
-        empresa: { select: { razaoSocial: true } }
+      include: {
+        empresa: { select: { razaoSocial: true } },
+        r4020: {
+          include: {
+            registros: {
+              include: {
+                prestador: { select: { razaoSocial: true } }
+              },
+              take: 1
+            }
+          }
+        }
       }
     });
 
     const mergedTimeline = [
-      ...esocialEvents.map(e => ({
-        id: e.id,
-        tipo: `eSocial ${e.tpEvento}`,
-        referencia: e.perApur,
-        descricao: `Evento ${e.tpEvento} processado no eSocial com status ${e.status}`,
-        timestamp: e.createdAt,
-        retificador: e.indRetif && e.indRetif > 1
-      })),
-      ...reinfEventsObj.map(e => ({
-        id: e.id,
-        tipo: `REINF ${e.tpEvento}`,
-        referencia: e.perApur,
-        descricao: `Evento ${e.tpEvento} processado na REINF com status ${e.status}`,
-        timestamp: e.createdAt,
-        retificador: e.indRetif && e.indRetif > 1
-      }))
+      ...esocialEvents.map(e => {
+        let label = `Evento ${e.tpEvento} processado no eSocial com status ${e.status}`;
+        const name = e.trabalhador?.nome || (e.cpfBenef ? `CPF: ${e.cpfBenef}` : undefined);
+        if (name) {
+          if (e.status === "erro") {
+            label = `Rejeição de fechamento de ${name} [S-5002]`;
+          } else if (e.indRetif && e.indRetif > 1) {
+            label = `Retificação de folha consolidada: ${name} [S-5002]`;
+          } else {
+            label = `Fechamento de folha integrado: ${name} [S-5002]`;
+          }
+        }
+        return {
+          id: e.id,
+          tipo: `eSocial ${e.tpEvento}`,
+          referencia: e.perApur,
+          descricao: label,
+          timestamp: e.createdAt,
+          retificador: e.indRetif && e.indRetif > 1
+        };
+      }),
+      ...reinfEventsObj.map(e => {
+        const prestadorNome = e.r4020?.registros?.[0]?.prestador?.razaoSocial || e.r4020?.registros?.[0]?.cnpjBenef;
+        let label = `Evento ${e.tpEvento} processado na REINF com status ${e.status}`;
+        if (prestadorNome) {
+          if (e.status === "erro") {
+            label = `Rejeição de retenção de ${prestadorNome} [R-4020]`;
+          } else if (e.indRetif && e.indRetif > 1) {
+            label = `Retificação de serviços tomados: ${prestadorNome} [R-4020]`;
+          } else {
+            label = `Fechamento de retenções integrado: ${prestadorNome} [R-4020]`;
+          }
+        } else if (e.tpEvento === "R-2099") {
+          label = `Fechamento anual de informações da REINF [R-2099]`;
+        }
+        return {
+          id: e.id,
+          tipo: `REINF ${e.tpEvento}`,
+          referencia: e.perApur,
+          descricao: label,
+          timestamp: e.createdAt,
+          retificador: e.indRetif && e.indRetif > 1
+        };
+      })
     ]
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
     .slice(0, 20);
-
-    const finalTimeline = mergedTimeline.length > 0 ? mergedTimeline : [
-      { id: "t1", tipo: "eSocial S-5002", referencia: "2025-12", descricao: "Evento de fechamento S-5002 processado com sucesso", timestamp: new Date(Date.now() - 5 * 60 * 1000), retificador: false },
-      { id: "t2", tipo: "REINF R-4020", referencia: "2025-12", descricao: "Retenções de pagamentos R-4020 integradas ao fechamento", timestamp: new Date(Date.now() - 12 * 60 * 1000), retificador: false }
-    ];
 
     // Fiscal Alerts (BLOCO 6)
     const alerts = [];
@@ -213,8 +300,9 @@ export async function GET(req: NextRequest) {
           "Nenhuma inconsistência cadastral de trabalhadores ativa"
         ]
       },
+      ano: targetYear,
       monthlySeries,
-      timeline: finalTimeline,
+      timeline: mergedTimeline,
       alerts: alerts
     });
 
