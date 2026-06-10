@@ -167,6 +167,89 @@ async function processLine(tableId: string, parts: string[]) {
         update: { descricao: parts[1], dtFim: parseESocialDate(parts[3]) },
         create: { codigo: parts[0], descricao: parts[1], dtInicio: dtInicio, dtFim: parseESocialDate(parts[3]) }
       });
+    case "02":
+      return prisma.esocialTabela02.upsert({
+        where: { codigo_dtInicio: { codigo: parts[0], dtInicio: dtInicio } },
+        update: { descricao: parts[1], dtFim: parseESocialDate(parts[3]) },
+        create: { codigo: parts[0], descricao: parts[1], dtInicio: dtInicio, dtFim: parseESocialDate(parts[3]) }
+      });
+    case "04":
+      return prisma.esocialTabela04.upsert({
+        where: {
+          codFpas_indCoop_dtInicio_classTrib_codTerc: {
+            codFpas: parts[0],
+            indCoop: parts[1] || "",
+            dtInicio: dtInicio,
+            classTrib: parts[4] || "",
+            codTerc: parts[5] || ""
+          }
+        },
+        update: {
+          dtFim: parseESocialDate(parts[3]),
+          aliqTerc: parts[6] ? parts[6].replace(",", ".") : null
+        },
+        create: {
+          codFpas: parts[0],
+          indCoop: parts[1] || "",
+          dtInicio: dtInicio,
+          dtFim: parseESocialDate(parts[3]),
+          classTrib: parts[4] || "",
+          codTerc: parts[5] || "",
+          aliqTerc: parts[6] ? parts[6].replace(",", ".") : null
+        }
+      });
+    case "06":
+      return prisma.esocialTabela06.upsert({
+        where: { codigo_dtInicio: { codigo: parts[0], dtInicio: dtInicio } },
+        update: { descricao: parts[1], dtFim: parseESocialDate(parts[3]) },
+        create: { codigo: parts[0], descricao: parts[1], dtInicio: dtInicio, dtFim: parseESocialDate(parts[3]) }
+      });
+    case "08":
+      return prisma.esocialTabela08.upsert({
+        where: { codigo_dtInicio: { codigo: parts[0], dtInicio: dtInicio } },
+        update: { descricao: parts[1], dtFim: parseESocialDate(parts[3]), tpInsc: parts[4] || null },
+        create: { codigo: parts[0], descricao: parts[1], dtInicio: dtInicio, dtFim: parseESocialDate(parts[3]), tpInsc: parts[4] || null }
+      });
+    case "09":
+      return prisma.esocialTabela09.upsert({
+        where: { codigo_dtInicio: { codigo: parts[0], dtInicio: dtInicio } },
+        update: {
+          descricao: parts[1] || null,
+          dtFim: parseESocialDate(parts[3]),
+          idTpEvento: parts[4] || null,
+          tagTpEvent: parts[5] || null,
+          identific: parts[6] || null,
+          indChDupl: parts[7] || null,
+          indExcl: parts[8] || null,
+          classTrib: parts[9] || null,
+          nClassTri: parts[10] || null,
+          obrigWebDom: parts[11] || null,
+          obrigLr: parts[12] || null,
+          obrigOrgp: parts[13] || null,
+          obrigGrupo2: parts[14] || null,
+          obrigDefaultPf: parts[15] || null,
+          obrigDefaultPj: parts[16] || null,
+        },
+        create: {
+          codigo: parts[0],
+          descricao: parts[1] || null,
+          dtInicio: dtInicio,
+          dtFim: parseESocialDate(parts[3]),
+          idTpEvento: parts[4] || null,
+          tagTpEvent: parts[5] || null,
+          identific: parts[6] || null,
+          indChDupl: parts[7] || null,
+          indExcl: parts[8] || null,
+          classTrib: parts[9] || null,
+          nClassTri: parts[10] || null,
+          obrigWebDom: parts[11] || null,
+          obrigLr: parts[12] || null,
+          obrigOrgp: parts[13] || null,
+          obrigGrupo2: parts[14] || null,
+          obrigDefaultPf: parts[15] || null,
+          obrigDefaultPj: parts[16] || null,
+        }
+      });
     default:
       throw new Error(`Tabela ${tableId} não suportada.`);
   }

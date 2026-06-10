@@ -18,8 +18,13 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 
 const TABLES = [
   { id: "01", name: "Tabela 01", fullName: "Categorias de Trabalhadores - eSocial" },
+  { id: "02", name: "Tabela 02", fullName: "Financiamento da Aposentadoria Especial e Redução do Tempo de Contribuição" },
   { id: "03", name: "Tabela 03", fullName: "Tabela de Natureza das Rubricas da Folha de Pagamento - eSocial" },
+  { id: "04", name: "Tabela 04", fullName: "Códigos e Alíquotas de FPAS/Terceiros" },
   { id: "05", name: "Tabela 05", fullName: "Tipos de Inscrição - eSocial" },
+  { id: "06", name: "Tabela 06", fullName: "Tabela de Países do eSocial" },
+  { id: "08", name: "Tabela 08", fullName: "Classificação Tributária" },
+  { id: "09", name: "Tabela 09", fullName: "Tipos de Arquivo" },
   { id: "21", name: "Tabela 21", fullName: "Códigos de Incidência Tributária da Rubrica para IRRF" },
   { id: "25", name: "Tabela 25", fullName: "Tipos de Dependente - eSocial" },
   { id: "54", name: "Tabela 54", fullName: "Tabela de Rubricas do eSocial" },
@@ -163,6 +168,9 @@ export default function TablesViewPage() {
                          <th className="p-4 text-[10px] font-black uppercase tracking-widest text-secondary">Fim</th>
                          {activeTable === "01" && <th className="p-4 text-[10px] font-black uppercase tracking-widest text-secondary">Aliq. FGTS</th>}
                          {activeTable === "54" && <th className="p-4 text-[10px] font-black uppercase tracking-widest text-secondary">Nat. Rubr.</th>}
+                         {activeTable === "04" && <th className="p-4 text-[10px] font-black uppercase tracking-widest text-secondary">Aliq. Terc</th>}
+                         {activeTable === "08" && <th className="p-4 text-[10px] font-black uppercase tracking-widest text-secondary">Tp. Inscrição</th>}
+                         {activeTable === "09" && <th className="p-4 text-[10px] font-black uppercase tracking-widest text-secondary font-bold">Tag Evento</th>}
                       </tr>
                    </thead>
                    <tbody className="divide-y divide-outline-variant/30">
@@ -180,10 +188,16 @@ export default function TablesViewPage() {
                       }).map((row, idx) => (
                         <tr key={idx} className="hover:bg-surface-container transition-colors group">
                            <td className="p-4 font-mono text-xs font-bold text-primary border-r border-outline-variant/30 group-hover:bg-primary/5">
-                              {row.codigo || row.codRubrica}
+                              {row.codigo || row.codRubrica || row.codFpas}
                            </td>
                            <td className="p-4 text-xs font-medium max-w-md">
-                              {row.descricao || row.nome || row.nomeRubrica}
+                              {activeTable === "04" ? (
+                                 <span>
+                                   FPAS {row.codFpas} - Código de FPAS/Terceiros (Cód. Terc: {row.codTerc} | Class. Trib: {row.classTrib || "N/A"} | Coop: {row.indCoop || "N/A"})
+                                 </span>
+                               ) : (
+                                 row.descricao || row.nome || row.nomeRubrica
+                               )}
                            </td>
                            <td className="p-4 text-[11px] font-bold text-secondary">
                               {row.dtInicio ? format(new Date(row.dtInicio), 'dd/MM/yyyy') : '-'}
@@ -193,6 +207,9 @@ export default function TablesViewPage() {
                            </td>
                            {activeTable === "01" && <td className="p-4 text-[11px] font-bold">{row.aliqFgts}%</td>}
                            {activeTable === "54" && <td className="p-4 text-[11px] font-bold">{row.natRubrica}</td>}
+                            {activeTable === "04" && <td className="p-4 text-[11px] font-bold">{row.aliqTerc || "0"}%</td>}
+                            {activeTable === "08" && <td className="p-4 text-[11px] font-bold">{row.tpInsc || "Ambos"}</td>}
+                            {activeTable === "09" && <td className="p-4 text-[11px] font-bold text-primary">{row.tagTpEvent || "-"}</td>}
                         </tr>
                       ))}
                    </tbody>

@@ -17,8 +17,13 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 
 const TABLES = [
   { id: "01", name: "Tabela 01 - Categorias de Trabalhadores - eSocial" },
+  { id: "02", name: "Tabela 02 - Financiamento da Aposentadoria Especial e Redução do Tempo de Contribuição" },
   { id: "03", name: "Tabela 03 - Tabela de Natureza das Rubricas da Folha de Pagamento - eSocial" },
+  { id: "04", name: "Tabela 04 - Códigos e Alíquotas de FPAS/Terceiros" },
   { id: "05", name: "Tabela 05 - Tipos de Inscrição - eSocial" },
+  { id: "06", name: "Tabela 06 - Tabela de Países do eSocial" },
+  { id: "08", name: "Tabela 08 - Classificação Tributária" },
+  { id: "09", name: "Tabela 09 - Tipos de Arquivo" },
   { id: "21", name: "Tabela 21 - Códigos de Incidência Tributária da Rubrica para IRRF" },
   { id: "25", name: "Tabela 25 - Tipos de Dependente - eSocial" },
   { id: "54", name: "Tabela 54 - Tabela de Rubricas do eSocial" },

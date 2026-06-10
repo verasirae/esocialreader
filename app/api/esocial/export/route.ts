@@ -42,6 +42,26 @@ export async function GET(req: NextRequest) {
         csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM\n";
         data = await prisma.esocialTabela80.findMany();
         break;
+      case "02":
+        csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM\n";
+        data = await prisma.esocialTabela02.findMany();
+        break;
+      case "04":
+        csvHeader = "CODFPAS|INDCOOP|DtInicio|DtFim|CLASSTRIB|CODTERC|ALIQTERC\n";
+        data = await prisma.esocialTabela04.findMany();
+        break;
+      case "06":
+        csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM\n";
+        data = await prisma.esocialTabela06.findMany();
+        break;
+      case "08":
+        csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM|TPInsc\n";
+        data = await prisma.esocialTabela08.findMany();
+        break;
+      case "09":
+        csvHeader = "CODIGO|DESCRICAO|DTINICIO|DTFIM|IDTPEVENTO|TAGTPEVENT|IDENTIFIC|INDCHDUPL|INDEXCL|CLASSTRIB|NCLASSTRI|OBRIG_WEB_DOM|OBRIG_LR|OBRIG_ORGP|OBRIG_GRUPO_2|OBRIG_DEFAULT_PF|OBRIG_DEFAULT_PJ\n";
+        data = await prisma.esocialTabela09.findMany();
+        break;
     }
 
     const csvRows = data.map(row => {

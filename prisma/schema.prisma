@@ -863,6 +863,78 @@ model EsocialTabela80 {
   @@map("esocial_tabela_80")
 }
 
+model EsocialTabela02 {
+  id        String    @id @default(cuid())
+  codigo    String
+  descricao String
+  dtInicio  DateTime  @map("dt_inicio")
+  dtFim     DateTime? @map("dt_fim")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_02")
+}
+
+model EsocialTabela04 {
+  id         String    @id @default(cuid())
+  codFpas    String    @map("cod_fpas")
+  indCoop    String    @default("") @map("ind_coop")
+  dtInicio   DateTime  @map("dt_inicio")
+  dtFim      DateTime? @map("dt_fim")
+  classTrib  String    @default("") @map("class_trib")
+  codTerc    String    @map("cod_terc")
+  aliqTerc   String?   @map("aliq_terc")
+
+  @@unique([codFpas, indCoop, dtInicio, classTrib, codTerc])
+  @@map("esocial_tabela_04")
+}
+
+model EsocialTabela06 {
+  id        String    @id @default(cuid())
+  codigo    String
+  descricao String
+  dtInicio  DateTime  @map("dt_inicio")
+  dtFim     DateTime? @map("dt_fim")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_06")
+}
+
+model EsocialTabela08 {
+  id        String    @id @default(cuid())
+  codigo    String
+  descricao String
+  dtInicio  DateTime  @map("dt_inicio")
+  dtFim     DateTime? @map("dt_fim")
+  tpInsc    String?   @map("tp_insc")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_08")
+}
+
+model EsocialTabela09 {
+  id             String    @id @default(cuid())
+  codigo         String
+  descricao      String?
+  dtInicio       DateTime  @map("dt_inicio")
+  dtFim          DateTime? @map("dt_fim")
+  idTpEvento     String?   @map("id_tp_evento")
+  tagTpEvent     String?   @map("tag_tp_event")
+  identific      String?   @map("identific")
+  indChDupl      String?   @map("ind_ch_dupl")
+  indExcl        String?   @map("ind_excl")
+  classTrib      String?   @map("class_trib")
+  nClassTri      String?   @map("n_class_tri")
+  obrigWebDom    String?   @map("obrig_web_dom")
+  obrigLr        String?   @map("obrig_lr")
+  obrigOrgp      String?   @map("obrig_orgp")
+  obrigGrupo2    String?   @map("obrig_grupo_2")
+  obrigDefaultPf String?   @map("obrig_default_pf")
+  obrigDefaultPj String?   @map("obrig_default_pj")
+
+  @@unique([codigo, dtInicio])
+  @@map("esocial_tabela_09")
+}
+
 model DivergenciaFiscal {
   id         String         @id @default(cuid())
   eventoId   String?        @map("evento_id")

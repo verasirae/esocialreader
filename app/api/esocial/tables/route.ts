@@ -66,6 +66,36 @@ export async function GET(req: Request) {
           prisma.esocialTabela80.count()
         ]);
         break;
+      case "02":
+        [data, total] = await Promise.all([
+          prisma.esocialTabela02.findMany({ skip, take: pageSize, orderBy: { codigo: "asc" } }),
+          prisma.esocialTabela02.count()
+        ]);
+        break;
+      case "04":
+        [data, total] = await Promise.all([
+          prisma.esocialTabela04.findMany({ skip, take: pageSize, orderBy: { codFpas: "asc" } }),
+          prisma.esocialTabela04.count()
+        ]);
+        break;
+      case "06":
+        [data, total] = await Promise.all([
+          prisma.esocialTabela06.findMany({ skip, take: pageSize, orderBy: { codigo: "asc" } }),
+          prisma.esocialTabela06.count()
+        ]);
+        break;
+      case "08":
+        [data, total] = await Promise.all([
+          prisma.esocialTabela08.findMany({ skip, take: pageSize, orderBy: { codigo: "asc" } }),
+          prisma.esocialTabela08.count()
+        ]);
+        break;
+      case "09":
+        [data, total] = await Promise.all([
+          prisma.esocialTabela09.findMany({ skip, take: pageSize, orderBy: { codigo: "asc" } }),
+          prisma.esocialTabela09.count()
+        ]);
+        break;
       default:
         return NextResponse.json({ error: "Tabela não suportada" }, { status: 400 });
     }

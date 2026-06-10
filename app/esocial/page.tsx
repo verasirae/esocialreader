@@ -35,8 +35,13 @@ import { gerarInformePDF } from "@/lib/pdf-generator";
 
 const tableCards = [
   { id: "01", icon: Users, label: "Tabela 01", sub: "Categorias de Trabalhadores - eSocial", type: "OFICIAL", lastUpdate: "12/05/2024" },
+  { id: "02", icon: ShieldCheck, label: "Tabela 02", sub: "Financiamento da Aposentadoria Especial e Redução do Tempo de Contribuição", type: "OFICIAL", lastUpdate: "10/06/2026" },
   { id: "03", icon: BookOpen, label: "Tabela 03", sub: "Tabela de Natureza das Rubricas da Folha de Pagamento - eSocial", type: "OFICIAL", lastUpdate: "10/06/2024", active: true },
+  { id: "04", icon: FileText, label: "Tabela 04", sub: "Códigos e Alíquotas de FPAS/Terceiros", type: "OFICIAL", lastUpdate: "10/06/2026" },
   { id: "05", icon: FileText, label: "Tabela 05", sub: "Tipos de Inscrição - eSocial", type: "OFICIAL", lastUpdate: "10/06/2024" },
+  { id: "06", icon: BookOpen, label: "Tabela 06", sub: "Tabela de Países do eSocial", type: "OFICIAL", lastUpdate: "10/06/2026" },
+  { id: "08", icon: ShieldCheck, label: "Tabela 08", sub: "Classificação Tributária", type: "OFICIAL", lastUpdate: "10/06/2026" },
+  { id: "09", icon: FileText, label: "Tabela 09", sub: "Tipos de Arquivo", type: "OFICIAL", lastUpdate: "10/06/2026" },
   { id: "21", icon: ShieldCheck, label: "Tabela 21", sub: "Códigos de Incidência Tributária da Rubrica para IRRF", type: "OFICIAL", lastUpdate: "15/01/2024" },
   { id: "25", icon: BookOpen, label: "Tabela 25", sub: "Tipos de Dependente - eSocial", type: "OFICIAL", lastUpdate: "15/01/2024" },
   { id: "54", icon: Settings2, label: "Tabela 54", sub: "Tabela de Rubricas do eSocial", type: "CONFIG", lastUpdate: "02/06/2024" },
