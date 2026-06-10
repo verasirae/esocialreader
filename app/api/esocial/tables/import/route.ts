@@ -34,12 +34,22 @@ export async function POST(req: Request) {
     for (const line of lines) {
       if (!line.trim()) continue;
       
+      const parts = line.split("|").map((p: string) => p.trim());
+      const firstPartUpper = parts[0]?.toUpperCase();
+
       // Skip common header strings
-      if (line.toUpperCase().includes("CODIGO|") || line.toUpperCase().includes("DESCRICAO|")) {
+      if (
+        line.toUpperCase().includes("CODIGO|") || 
+        line.toUpperCase().includes("DESCRICAO|") ||
+        firstPartUpper === "CODIGO" ||
+        firstPartUpper === "CODFPAS" ||
+        firstPartUpper === "COD_RUBRICA" ||
+        parts[2]?.toUpperCase() === "DTINICIO" ||
+        parts[2]?.toUpperCase() === "DT_INICIO"
+      ) {
          continue;
       }
 
-      const parts = line.split("|").map((p: string) => p.trim());
       try {
         await processLine(tableId, parts);
         processed++;
