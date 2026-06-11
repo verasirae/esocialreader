@@ -22,11 +22,16 @@ export interface SqlGuardResult {
   motivo?: string;
 }
 
-export function validarSql(sql: string): SqlGuardResult {
+export function validarSql(sql: string, isSuperAdmin = false): SqlGuardResult {
   const sqlNorm = sql.trim();
 
   if (!sqlNorm) {
     return { permitido: false, motivo: "SQL não pode estar vazio." };
+  }
+
+  // Se o usuário for SUPER_ADMIN, liberamos acesso irrestrito
+  if (isSuperAdmin) {
+    return { permitido: true };
   }
 
   for (const pattern of BLOCKED_PATTERNS) {

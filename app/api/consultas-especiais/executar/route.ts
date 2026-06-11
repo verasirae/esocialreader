@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
     const cleanSql = sql.trim();
 
     // 2. Validação de segurança (SQL Guard)
-    const guard = validarSql(cleanSql);
+    const isSuperAdmin = sessionUser.perfil === "SUPER_ADMIN" || sessionUser.perfil === "superAdmin";
+    const guard = validarSql(cleanSql, isSuperAdmin);
     if (!guard.permitido) {
       // Registrar tentativa bloqueada para fins de auditoria e segurança
       await prisma.consultaExecucao.create({

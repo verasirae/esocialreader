@@ -8,7 +8,14 @@ async function verifyAdminAuth() {
   if (!user) return null;
   
   const perfilUpper = user.perfil.toUpperCase();
-  if (perfilUpper === "SUPER_ADMIN" || perfilUpper === "ADMIN") {
+  const impersonatorPerfilUpper = user.impersonator?.perfil?.toUpperCase();
+
+  if (
+    perfilUpper === "SUPER_ADMIN" || 
+    perfilUpper === "ADMIN" ||
+    impersonatorPerfilUpper === "SUPER_ADMIN" ||
+    impersonatorPerfilUpper === "ADMIN"
+  ) {
     return user;
   }
   return null;
