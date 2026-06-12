@@ -13,11 +13,13 @@ import {
   Download
 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
-import { safeJsonFetch } from "@/lib/utils";
+import { safeJsonFetch, hasDetailedAction } from "@/lib/utils";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { gerarInformePDF } from "@/lib/pdf-generator";
+import { useAuth } from "@/lib/contexts/AuthContext";
 
 export default function TrabalhadoresPage() {
+  const { user } = useAuth();
   const [trabalhadoresData, setTrabalhadoresData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -148,16 +150,18 @@ export default function TrabalhadoresPage() {
                 Informe ({f.ano})
               </button>
             )}
-            <button 
-              className="btn-outline px-6 bg-white border-primary/20 text-primary hover:bg-primary/5 flex items-center justify-center gap-2"
-              onClick={() => {
-                openRegisterTrabalhadorModal(selectedRowDetail);
-                setIsDataModalOpen(false);
-              }}
-            >
-              <Pencil size={14} />
-              Editar Trabalhador
-            </button>
+            {hasDetailedAction(user, "trabalhadores", "editar") && (
+              <button 
+                className="btn-outline px-6 bg-white border-primary/20 text-primary hover:bg-primary/5 flex items-center justify-center gap-2"
+                onClick={() => {
+                  openRegisterTrabalhadorModal(selectedRowDetail);
+                  setIsDataModalOpen(false);
+                }}
+              >
+                <Pencil size={14} />
+                Editar Trabalhador
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -197,13 +201,24 @@ export default function TrabalhadoresPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button 
-              className="btn-primary flex items-center gap-2 py-2"
-              onClick={() => openRegisterTrabalhadorModal()}
-            >
-              <Plus size={14} />
-              <span>Novo Trabalhador</span>
-            </button>
+            {hasDetailedAction(user, "trabalhadores", "criar") ? (
+              <button 
+                className="btn-primary flex items-center gap-2 py-2"
+                onClick={() => openRegisterTrabalhadorModal()}
+              >
+                <Plus size={14} />
+                <span>Novo Trabalhador</span>
+              </button>
+            ) : (
+              <button 
+                className="btn-primary opacity-50 cursor-not-allowed flex items-center gap-2 py-2"
+                onClick={() => alert("Você não possui permissão para cadastrar trabalhadores.")}
+                title="Acesso restrito"
+              >
+                <Plus size={14} />
+                <span>Novo Trabalhador</span>
+              </button>
+            )}
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -241,9 +256,15 @@ export default function TrabalhadoresPage() {
                        <button className="p-2 hover:bg-white border border-outline-variant rounded transition-all" onClick={() => openDetails(trab)} title="Ver detalhes">
                           <Eye size={14} className="text-secondary" />
                        </button>
-                       <button className="p-2 hover:bg-white border border-primary/20 rounded transition-all" onClick={() => openRegisterTrabalhadorModal(trab)} title="Editar">
-                          <Pencil size={14} className="text-primary" />
-                       </button>
+                       {hasDetailedAction(user, "trabalhadores", "editar") ? (
+                         <button className="p-2 hover:bg-white border border-primary/20 rounded transition-all" onClick={() => openRegisterTrabalhadorModal(trab)} title="Editar">
+                            <Pencil size={14} className="text-primary" />
+                         </button>
+                       ) : (
+                         <button className="p-2 opacity-30 cursor-not-allowed border border-neutral-200 rounded transition-all" onClick={() => alert("Você não possui permissão para editar trabalhadores.")} title="Acesso restrito">
+                            <Pencil size={14} className="text-neutral-400" />
+                         </button>
+                       )}
                     </td>
                   </tr>
                 ))

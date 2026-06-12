@@ -75,12 +75,22 @@ interface SystemQueue {
 // Default keys for checkboxes in dynamic profile permissions
 const PERMISSION_KEYS = [
   { key: "visualizarDashboard", label: "Acessar Dashboard Geral" },
-  { key: "importarXml", label: "Importar Arquivos XML" },
-  { key: "reprocessarEventos", label: "Reprocessar Eventos Fiscais" },
-  { key: "excluirDados", label: "Excluir Dados do Sistema" },
-  { key: "configurarIntegracoes", label: "Configurar Integrações Externas" },
-  { key: "consultarLogs", label: "Consultar Históricos e Logs" },
-  { key: "gerenciarEmpresas", label: "Cadastrar/Editar Empregadores" }
+  { key: "esocial", label: "Diretório /esocial (eSocial S-5002)" },
+  { key: "reinf", label: "Diretório /reinf (EFD-REINF)" },
+  { key: "empregadores", label: "Diretório /empregadores (Gestão de Empregadores)" },
+  { key: "trabalhadores", label: "Diretório /trabalhadores (Cadastro de Trabalhadores)" },
+  { key: "operadoras", label: "Diretório /operadoras (Operadoras de Saúde)" },
+  { key: "consolidacao", label: "Diretório /consolidacao (Consolidação Fiscal)" },
+  { key: "codigos", label: "Diretório /codigos-receita (Códigos de Receita)" },
+  { key: "pendencias", label: "Diretório /pendencias (Pendências)" },
+  { key: "periodos", label: "Diretório /periodos (Períodos Fiscais)" },
+  { key: "settings", label: "Diretório /settings (Configurações)" },
+  { key: "governanca", label: "Diretório /governanca (Governança)" },
+  { key: "importarXml", label: "Ação: Importar Arquivos XML" },
+  { key: "reprocessarEventos", label: "Ação: Reprocessar Eventos Fiscais" },
+  { key: "excluirDados", label: "Ação: Excluir Dados do Sistema" },
+  { key: "configurarIntegracoes", label: "Ação: Configurar Integrações" },
+  { key: "consultarLogs", label: "Ação: Consultar Históricos e Logs" }
 ];
 
 const DETAILED_MODULES = [
@@ -300,6 +310,7 @@ export default function GovernanceDashboard() {
     if (hasAccess) {
       fetchTabData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   if (!hasAccess) {
@@ -429,10 +440,10 @@ export default function GovernanceDashboard() {
     }
   };
 
-  // Impersonate User (Only for SuperAdmin)
+  // Impersonate User
   const handleImpersonateUser = async (targetUser: any) => {
-    if (!isSuperAdmin) {
-      alert("Iniciativa Bloqueada: Apenas SuperAdmins possuem privilégios de impersonificar outras contas.");
+    if (!isSuperAdmin && !isAdmin) {
+      alert("Iniciativa Bloqueada: Apenas Administradores possuem privilégios de impersonificar outras contas.");
       return;
     }
 
@@ -496,11 +507,11 @@ export default function GovernanceDashboard() {
     }
   };
 
-  // Save Dynamic Profile (Only for SuperAdmin)
+  // Save Dynamic Profile
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isSuperAdmin) {
-      alert("Restrição: Apenas SuperAdmin possui poderes de alteração em perfis/diretrizes de segurança dinâmicas.");
+    if (!isSuperAdmin && !isAdmin) {
+      alert("Restrição: Apenas Administradores possuem poderes de alteração em perfis/diretrizes de segurança dinâmicas.");
       return;
     }
 
@@ -612,10 +623,10 @@ export default function GovernanceDashboard() {
     }
   };
 
-  // Remove Dynamic Profile (Only SuperAdmin)
+  // Remove Dynamic Profile
   const handleDeleteProfile = async (profileId: string) => {
-    if (!isSuperAdmin) {
-      alert("Apenas SuperAdmins podem remover perfis.");
+    if (!isSuperAdmin && !isAdmin) {
+      alert("Apenas Administradores podem remover perfis.");
       return;
     }
 
@@ -1108,12 +1119,18 @@ export default function GovernanceDashboard() {
                           onChange={(e) => setNewUserPerfil(e.target.value)}
                           className="text-xs p-2 border border-outline-variant focus:outline-none focus:border-primary bg-white text-on-surface font-semibold"
                         >
-                          <option value="OPERADOR font-semibold">OPERADOR</option>
+                          <option value="OPERADOR">OPERADOR</option>
                           <option value="ANALISTA">ANALISTA</option>
                           <option value="GESTOR">GESTOR</option>
                           <option value="CLIENTE">CLIENTE</option>
                           <option value="ADMIN">ADMIN</option>
                           {isSuperAdmin && <option value="SUPER_ADMIN">SUPER_ADMIN (Super Usuário)</option>}
+                          {perfis
+                            .filter(p => !["OPERADOR", "ANALISTA", "GESTOR", "CLIENTE", "ADMIN", "SUPER_ADMIN", "SUPERADMIN"].includes(p.nomePerfil.toUpperCase()))
+                            .map(p => (
+                              <option key={p.id} value={p.nomePerfil.toUpperCase()}>{p.nomePerfil.toUpperCase()}</option>
+                            ))
+                          }
                         </select>
                       </div>
                     </div>
@@ -1234,6 +1251,12 @@ export default function GovernanceDashboard() {
                           <option value="CLIENTE">CLIENTE</option>
                           <option value="ADMIN">ADMIN</option>
                           {isSuperAdmin && <option value="SUPER_ADMIN">SUPER_ADMIN (Super Usuário)</option>}
+                          {perfis
+                            .filter(p => !["OPERADOR", "ANALISTA", "GESTOR", "CLIENTE", "ADMIN", "SUPER_ADMIN", "SUPERADMIN"].includes(p.nomePerfil.toUpperCase()))
+                            .map(p => (
+                              <option key={p.id} value={p.nomePerfil.toUpperCase()}>{p.nomePerfil.toUpperCase()}</option>
+                            ))
+                          }
                         </select>
                       </div>
 
@@ -1463,14 +1486,14 @@ export default function GovernanceDashboard() {
                     {editingProfileId ? `Editar Diretriz: ${newProfileName}` : "Gestão de Diretrizes Fiscais"}
                   </h3>
 
-                  {!isSuperAdmin ? (
+                  {!isSuperAdmin && !isAdmin ? (
                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-xs flex flex-col gap-2">
                       <div className="flex gap-2 items-center text-amber-800 font-extrabold text-xs">
                         <Lock size={16} />
                         Diretiva Bloqueada
                       </div>
                       <p className="text-[10px] text-amber-700 leading-normal">
-                        Apenas usuários com perfil <strong className="text-primary">SUPER_ADMIN</strong> de sistema podem redefinir ou cadastrar regras de acessos dinâmicas adicionais.
+                        Apenas usuários com perfil <strong className="text-primary">SUPER_ADMIN ou ADMIN</strong> de sistema podem redefinir ou cadastrar regras de acessos dinâmicas adicionais.
                       </p>
                     </div>
                   ) : (

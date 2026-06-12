@@ -177,6 +177,7 @@ export default function ReinfPage() {
     if (selectedEmpresaId) {
       fetchTabData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmpresaId, activeTab]);
 
   const fetchTabData = async () => {

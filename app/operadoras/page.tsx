@@ -12,10 +12,12 @@ import {
   ChevronDown
 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
-import { safeJsonFetch } from "@/lib/utils";
+import { safeJsonFetch, hasDetailedAction } from "@/lib/utils";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useAuth } from "@/lib/contexts/AuthContext";
 
 export default function OperadorasPage() {
+  const { user } = useAuth();
   const [operadorasData, setOperadorasData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -106,16 +108,18 @@ export default function OperadorasPage() {
             >
               Fechar Detalhamento
             </button>
-            <button 
-              className="btn-outline px-6 bg-white border-primary/20 text-primary hover:bg-primary/5 flex items-center justify-center gap-2"
-              onClick={() => {
-                openRegisterOperadoraModal(selectedRowDetail);
-                setIsDataModalOpen(false);
-              }}
-            >
-              <Pencil size={14} />
-              Editar Operadora
-            </button>
+            {hasDetailedAction(user, "operadoras", "editar") && (
+              <button 
+                className="btn-outline px-6 bg-white border-primary/20 text-primary hover:bg-primary/5 flex items-center justify-center gap-2"
+                onClick={() => {
+                  openRegisterOperadoraModal(selectedRowDetail);
+                  setIsDataModalOpen(false);
+                }}
+              >
+                <Pencil size={14} />
+                Editar Operadora
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -155,13 +159,24 @@ export default function OperadorasPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button 
-              className="btn-primary flex items-center gap-2 py-2"
-              onClick={() => openRegisterOperadoraModal()}
-            >
-              <Plus size={14} />
-              <span>Nova Operadora</span>
-            </button>
+            {hasDetailedAction(user, "operadoras", "criar") ? (
+              <button 
+                className="btn-primary flex items-center gap-2 py-2"
+                onClick={() => openRegisterOperadoraModal()}
+              >
+                <Plus size={14} />
+                <span>Nova Operadora</span>
+              </button>
+            ) : (
+              <button 
+                className="btn-primary opacity-50 cursor-not-allowed flex items-center gap-2 py-2"
+                onClick={() => alert("Você não possui permissão para cadastrar operadoras de saúde.")}
+                title="Acesso restrito"
+              >
+                <Plus size={14} />
+                <span>Nova Operadora</span>
+              </button>
+            )}
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -197,9 +212,15 @@ export default function OperadorasPage() {
                        <button className="p-2 hover:bg-white border border-outline-variant rounded transition-all" onClick={() => openDetails(op)} title="Ver detalhes">
                           <Eye size={14} className="text-secondary" />
                        </button>
-                       <button className="p-2 hover:bg-white border border-primary/20 rounded transition-all" onClick={() => openRegisterOperadoraModal(op)} title="Editar">
-                          <Pencil size={14} className="text-primary" />
-                       </button>
+                       {hasDetailedAction(user, "operadoras", "editar") ? (
+                         <button className="p-2 hover:bg-white border border-primary/20 rounded transition-all" onClick={() => openRegisterOperadoraModal(op)} title="Editar">
+                            <Pencil size={14} className="text-primary" />
+                         </button>
+                       ) : (
+                         <button className="p-2 opacity-30 cursor-not-allowed border border-neutral-205 rounded transition-all" onClick={() => alert("Você não possui permissão para editar operadoras de saúde.")} title="Acesso restrito">
+                            <Pencil size={14} className="text-neutral-400" />
+                         </button>
+                       )}
                     </td>
                   </tr>
                 ))

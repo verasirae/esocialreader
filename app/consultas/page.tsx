@@ -178,6 +178,7 @@ export default function ConsultasEspeciaisPage() {
     if (user?.perfil === "SUPER_ADMIN" || user?.perfil === "superAdmin") {
       fetchCatalog();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalogSearch, user]);
 
   // Handle auto-generation of SQL from Visual Builder settings

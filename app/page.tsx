@@ -30,7 +30,7 @@ import {
   Layers,
   ArrowUpRight
 } from "lucide-react";
-import { cn, safeJsonFetch } from "@/lib/utils";
+import { cn, safeJsonFetch, isPathBlocked } from "@/lib/utils";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 // Recharts for stunning visual execution
@@ -435,14 +435,18 @@ export default function Dashboard() {
                   <span className="text-[9px] text-white/50 font-black uppercase">Consolidação</span>
                   <span className="text-xs font-mono font-bold">Base RFB {stats?.ano || "2025"}</span>
                 </div>
-                <button 
-                  onClick={triggerXmlUpload}
-                  className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase py-2.5 px-4 rounded active:scale-95 transition-all shadow-lg shadow-indigo-950/20"
-                >
-                  <CloudUpload size={14} />
-                  Carga XML S-5002
-                </button>
-                <input id="xml-upload-dashboard" type="file" multiple accept=".xml" className="hidden" onChange={handleUpload} disabled={isUploading} />
+                {!(isPathBlocked("/esocial", user).blocked || (user?.permissoes && user?.permissoes?.importarXml === false)) && (
+                  <>
+                    <button 
+                      onClick={triggerXmlUpload}
+                      className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase py-2.5 px-4 rounded active:scale-95 transition-all shadow-lg shadow-indigo-950/20"
+                    >
+                      <CloudUpload size={14} />
+                      Carga XML S-5002
+                    </button>
+                    <input id="xml-upload-dashboard" type="file" multiple accept=".xml" className="hidden" onChange={handleUpload} disabled={isUploading} />
+                  </>
+                )}
               </div>
             </div>
 
@@ -825,9 +829,11 @@ export default function Dashboard() {
                 <History size={16} className="text-[#1B365D]" />
                 Logs e Últimos Processamentos (Compensações)
               </h3>
-              <Link href="/esocial" className="text-[9px] font-black uppercase text-[#1B365D] hover:underline flex items-center tracking-wider bg-neutral-100 hover:bg-neutral-200 py-1.5 px-3 border rounded border-neutral-200/50">
-                Auditoria Completa <ChevronRight size={12} className="ml-0.5" />
-              </Link>
+              {!isPathBlocked("/esocial", user).blocked && (
+                <Link href="/esocial" className="text-[9px] font-black uppercase text-[#1B365D] hover:underline flex items-center tracking-wider bg-neutral-100 hover:bg-neutral-200 py-1.5 px-3 border rounded border-neutral-200/50">
+                  Auditoria Completa <ChevronRight size={12} className="ml-0.5" />
+                </Link>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -926,69 +932,85 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
               
-              <button 
-                onClick={triggerXmlUpload}
-                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
-              >
-                <PlusCircle size={18} className="group-hover:scale-110 transition-transform" />
-                Importar eSocial
-              </button>
+              {!isPathBlocked("/esocial", user).blocked && !(user?.permissoes && user?.permissoes?.importarXml === false) && (
+                <button 
+                  onClick={triggerXmlUpload}
+                  className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+                >
+                  <PlusCircle size={18} className="group-hover:scale-110 transition-transform" />
+                  Importar eSocial
+                </button>
+              )}
 
-              <Link 
-                href="/reinf"
-                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
-              >
-                <Upload size={18} className="group-hover:scale-110 transition-transform" />
-                Importar REINF
-              </Link>
+              {!isPathBlocked("/reinf", user).blocked && (
+                <Link 
+                  href="/reinf"
+                  className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+                >
+                  <Upload size={18} className="group-hover:scale-110 transition-transform" />
+                  Importar REINF
+                </Link>
+              )}
 
-              <Link 
-                href="/reinf"
-                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
-              >
-                <Sliders size={18} className="group-hover:scale-110 transition-transform" />
-                Cadastrar Prestador
-              </Link>
+              {!isPathBlocked("/reinf", user).blocked && (
+                <Link 
+                  href="/reinf"
+                  className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+                >
+                  <Sliders size={18} className="group-hover:scale-110 transition-transform" />
+                  Cadastrar Prestador
+                </Link>
+              )}
 
-              <Link 
-                href="/consolidacao"
-                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
-              >
-                <Layers size={18} className="group-hover:scale-110 transition-transform" />
-                Consolidação Fiscal
-              </Link>
+              {!isPathBlocked("/consolidacao", user).blocked && (
+                <Link 
+                  href="/consolidacao"
+                  className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+                >
+                  <Layers size={18} className="group-hover:scale-110 transition-transform" />
+                  Consolidação Fiscal
+                </Link>
+              )}
 
-              <Link 
-                href="/consolidacao"
-                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
-              >
-                <Download size={18} className="group-hover:scale-110 transition-transform" />
-                Gerar DIRF Digital
-              </Link>
+              {!isPathBlocked("/consolidacao", user).blocked && (
+                <Link 
+                  href="/consolidacao"
+                  className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+                >
+                  <Download size={18} className="group-hover:scale-110 transition-transform" />
+                  Gerar DIRF Digital
+                </Link>
+              )}
 
-              <Link 
-                href="/esocial"
-                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
-              >
-                <Activity size={18} className="group-hover:scale-110 transition-transform" />
-                Auditoria Geral
-              </Link>
+              {!isPathBlocked("/esocial", user).blocked && (
+                <Link 
+                  href="/esocial"
+                  className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+                >
+                  <Activity size={18} className="group-hover:scale-110 transition-transform" />
+                  Auditoria Geral
+                </Link>
+              )}
 
-              <Link 
-                href="/empregadores"
-                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
-              >
-                <Building size={18} className="group-hover:scale-110 transition-transform" />
-                Empregadores
-              </Link>
+              {!isPathBlocked("/empregadores", user).blocked && (
+                <Link 
+                  href="/empregadores"
+                  className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+                >
+                  <Building size={18} className="group-hover:scale-110 transition-transform" />
+                  Empregadores
+                </Link>
+              )}
 
-              <Link 
-                href="/trabalhadores"
-                className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
-              >
-                <UserCheck size={18} className="group-hover:scale-110 transition-transform" />
-                Trabalhadores S-5002
-              </Link>
+              {!isPathBlocked("/trabalhadores", user).blocked && (
+                <Link 
+                  href="/trabalhadores"
+                  className="p-3 bg-[#1B365D]/5 hover:bg-[#1B365D] hover:text-white border border-[#1B365D]/15 text-[#1B365D] font-bold text-[9.5px] uppercase tracking-wider rounded-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-center h-20 group"
+                >
+                  <UserCheck size={18} className="group-hover:scale-110 transition-transform" />
+                  Trabalhadores S-5002
+                </Link>
+              )}
 
             </div>
           </div>

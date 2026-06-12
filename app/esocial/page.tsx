@@ -176,6 +176,7 @@ function EsocialTablesContent() {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSyncing, currentPage, searchTerm]);
 
   const { openRegisterEmpresaModal, openRegisterTrabalhadorModal, openRegisterOperadoraModal } = useModals();
@@ -238,6 +239,7 @@ function EsocialTablesContent() {
     if (activeTab === "Conferência DIRF") {
       fetchConferencia();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTrabalhador, selectedAno, activeTab]);
 
   const handleRefreshAudit = async () => {
@@ -477,6 +479,7 @@ function EsocialTablesContent() {
     } else {
       fetchTableData(currentPage, searchTerm, groupFilter);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, currentPage, searchTerm, groupFilter, severidadeFilter, tipoFilter, selectedTable, selectedAno]);
 
   const fetchDivergencias = async (sev: string = "", tip: string = "") => {

@@ -65,8 +65,14 @@ export async function POST(req: NextRequest) {
           await tx.$executeRawUnsafe(`SET statement_timeout = ${TIMEOUT_MS}`);
 
           // Detecta se é SELECT para retornar linhas, ou DDL/DML para retornar affected count
-          const isSelect = cleanSql.toUpperCase().startsWith("SELECT")
-            || cleanSql.toUpperCase().startsWith("WITH");
+          // Remove comments and leading whitespace to check actual instruction type
+          const cleanForCheck = cleanSql
+            .replace(/--.*(?:\r?\n|$)/g, "") // remove single-line comments
+            .replace(/\/\*[\s\S]*?\*\//g, "") // remove multi-line comments
+            .trim()
+            .toUpperCase();
+
+          const isSelect = cleanForCheck.startsWith("SELECT") || cleanForCheck.startsWith("WITH");
 
           if (isSelect) {
             const rows = await tx.$queryRawUnsafe(cleanSql) as any[];

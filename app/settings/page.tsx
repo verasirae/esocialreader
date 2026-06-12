@@ -82,6 +82,7 @@ export default function SettingsPage() {
     if (activeTab === "users") {
       fetchUsuarios();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const handleCreateUser = async (e: React.FormEvent) => {

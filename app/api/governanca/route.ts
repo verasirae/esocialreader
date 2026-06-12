@@ -243,11 +243,13 @@ export async function POST(req: NextRequest) {
     const { action } = body;
 
     const isSuperAdmin = admin.perfil.toUpperCase() === "SUPER_ADMIN";
+    const isAdmin = admin.perfil.toUpperCase() === "ADMIN";
+    const hasAdminAccess = isSuperAdmin || isAdmin;
 
     // 1. IMPERSONATE ACTION
     if (action === "impersonate") {
-      if (!isSuperAdmin) {
-        return NextResponse.json({ error: "Apenas SuperAdmins podem impersonar usuários." }, { status: 403 });
+      if (!hasAdminAccess) {
+        return NextResponse.json({ error: "Apenas Administradores podem impersonar usuários." }, { status: 403 });
       }
 
       const { targetUserId } = body;
@@ -312,8 +314,8 @@ export async function POST(req: NextRequest) {
 
     // 3. CREATE / UPDATE PROFILE PERMISSIONS
     if (action === "save-profile") {
-      if (!isSuperAdmin) {
-        return NextResponse.json({ error: "Apenas SuperAdmins podem alterar permissões de perfil." }, { status: 403 });
+      if (!hasAdminAccess) {
+        return NextResponse.json({ error: "Apenas Administradores podem alterar permissões de perfil." }, { status: 403 });
       }
 
       const { id, nomePerfil, descricao, permissoes } = body;
@@ -370,8 +372,8 @@ export async function POST(req: NextRequest) {
 
     // 4. DELETE PROFILE PERMISSIONS
     if (action === "delete-profile") {
-      if (!isSuperAdmin) {
-        return NextResponse.json({ error: "Apenas SuperAdmins podem excluir perfis auxiliares." }, { status: 403 });
+      if (!hasAdminAccess) {
+        return NextResponse.json({ error: "Apenas Administradores podem excluir perfis auxiliares." }, { status: 403 });
       }
 
       const { profileId } = body;

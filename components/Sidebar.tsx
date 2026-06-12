@@ -20,7 +20,8 @@ import {
   LogOut,
   Database,
   Scale,
-  Lock
+  Lock,
+  Calendar
 } from "lucide-react";
 import { cn, isPathBlocked } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
@@ -34,9 +35,10 @@ const menuItems = [
   { icon: ShieldCheck, label: "Consolidação Fiscal", href: "/consolidacao" },
   { icon: FileText, label: "EFD-REINF", href: "/reinf" },
   { icon: AlertTriangle, label: "Pendências", href: "/pendencias" },
-  { icon: ShieldCheck, label: "Auditoria e Timeline", href: "/audit" },
-  { icon: FileText, label: "DIRF Digital", href: "/reports" },
+  { icon: ShieldCheck, label: "Auditoria S-5002", href: "/esocial" },
+  { icon: FileText, label: "DIRF Digital", href: "/consolidacao" },
   { icon: Scale, label: "Códigos de Receita", href: "/codigos-receita" },
+  { icon: Calendar, label: "Períodos Fiscais", href: "/periodos" },
 ];
 
 export function Sidebar() {
@@ -129,9 +131,13 @@ export function Sidebar() {
             const blockedInfo = isPathBlocked(item.href, user);
             const isBlocked = blockedInfo.blocked;
 
+            if (isBlocked) {
+              return null;
+            }
+
             return (
               <Link
-                key={item.href}
+                key={`${item.label}-${item.href}`}
                 href={item.href}
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={cn(
