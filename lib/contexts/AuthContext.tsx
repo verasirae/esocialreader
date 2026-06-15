@@ -22,8 +22,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const resp = await fetch("/api/auth/me");
       if (resp.ok) {
-        const data = await resp.json();
-        setUser(data.user);
+        const contentType = resp.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await resp.json();
+          setUser(data.user);
+        } else {
+          console.warn("Resposta não-JSON para /api/auth/me");
+          setUser(null);
+        }
       } else if (resp.status === 403) {
         setUser(null);
       }
@@ -46,12 +52,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await resp.json();
-      if (resp.ok && data.success) {
-        setUser(data.user);
-        return { success: true };
+      const contentType = resp.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+          setUser(data.user);
+          return { success: true };
+        } else {
+          return { success: false, error: data.error || "Credenciais inválidas" };
+        }
       } else {
-        return { success: false, error: data.error || "Credenciais inválidas" };
+        const text = await resp.text();
+        console.error("Erro não-JSON no login:", text.substring(0, 100));
+        return { success: false, error: "O servidor retornou uma resposta inválida." };
       }
     } catch (e) {
       console.error("Erro no login:", e);

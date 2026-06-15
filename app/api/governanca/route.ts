@@ -2,22 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, setSessionCookie, clearSessionCookie } from "@/lib/auth-server";
 
+export const dynamic = "force-dynamic";
+
 // Security helper to check and return user if SUPER_ADMIN or ADMIN
-async function verifyAdminAuth() {
+async function verifyAdminAuth(isUnimpersonateAction = false) {
   const user = await getCurrentUser();
   if (!user) return null;
   
   const perfilUpper = user.perfil.toUpperCase();
   const impersonatorPerfilUpper = user.impersonator?.perfil?.toUpperCase();
 
-  if (
-    perfilUpper === "SUPER_ADMIN" || 
-    perfilUpper === "ADMIN" ||
-    impersonatorPerfilUpper === "SUPER_ADMIN" ||
-    impersonatorPerfilUpper === "ADMIN"
-  ) {
+  // If the active profile of the current session is an admin role, allow access
+  if (perfilUpper === "SUPER_ADMIN" || perfilUpper === "ADMIN") {
     return user;
   }
+
+  // Securing against impersonator privilege retention:
+  // If the active profile is a simulated non-admin, they should NOT maintain any administrative powers.
+  // The only exception is the 'unimpersonate' action itself, which allows reverting to original administrator account.
+  if (isUnimpersonateAction && (impersonatorPerfilUpper === "SUPER_ADMIN" || impersonatorPerfilUpper === "ADMIN")) {
+    return user;
+  }
+
   return null;
 }
 
@@ -234,13 +240,14 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const admin = await verifyAdminAuth();
+    const body = await req.json().catch(() => ({}));
+    const { action } = body;
+    const isUnimpersonateAction = action === "unimpersonate";
+
+    const admin = await verifyAdminAuth(isUnimpersonateAction);
     if (!admin) {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
-
-    const body = await req.json();
-    const { action } = body;
 
     const isSuperAdmin = admin.perfil.toUpperCase() === "SUPER_ADMIN";
     const isAdmin = admin.perfil.toUpperCase() === "ADMIN";

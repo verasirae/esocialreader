@@ -2,14 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, hashPassword } from "@/lib/auth-server";
 
+export const dynamic = "force-dynamic";
+
 async function checkAdminPermission() {
   const currentUser = await getCurrentUser();
   if (!currentUser) return null;
+
+  // Securing against impersonator privilege retention:
+  // If the user's active session is impersonated, they are currently simulated as a lower privileged user
+  // and are not allowed to perform admin functions.
+  if (currentUser.impersonator) {
+    return null;
+  }
+
+  const perfilUpper = currentUser.perfil.toUpperCase();
   if (
-    currentUser.perfil === "SUPER_ADMIN" ||
-    currentUser.perfil === "ADMIN" ||
-    currentUser.perfil === "superAdmin" ||
-    currentUser.perfil === "Admin"
+    perfilUpper === "SUPER_ADMIN" ||
+    perfilUpper === "ADMIN"
   ) {
     return currentUser;
   }

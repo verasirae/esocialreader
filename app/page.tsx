@@ -28,7 +28,9 @@ import {
   Settings,
   X,
   Layers,
-  ArrowUpRight
+  ArrowUpRight,
+  RefreshCw,
+  Clock
 } from "lucide-react";
 import { cn, safeJsonFetch, isPathBlocked } from "@/lib/utils";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -105,6 +107,11 @@ export default function Dashboard() {
   // Current authenticated user
   const [user, setUser] = useState<any>(null);
 
+  // Auto refresh states
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<string>("manual");
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // User Customizable Settings & Persistent states
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
@@ -121,8 +128,12 @@ export default function Dashboard() {
   });
 
   // Load User, preferences, stats
-  const fetchDashboardData = async () => {
-    setIsLoading(true);
+  const fetchDashboardData = async (isBackground = false) => {
+    if (!isBackground) {
+      setIsLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
     try {
       // 1. Fetch authenticated user profile
       const userRes = await safeJsonFetch("/api/auth/me");
@@ -147,16 +158,31 @@ export default function Dashboard() {
       if (calRep) {
         setFiscalCalendar(calRep);
       }
+
+      const now = new Date();
+      const formatTwoDigits = (num: number) => num.toString().padStart(2, "0");
+      setLastUpdated(`${formatTwoDigits(now.getHours())}:${formatTwoDigits(now.getMinutes())}:${formatTwoDigits(now.getSeconds())}`);
     } catch (err) {
       console.error("Erro ao carregar dados do dashboard:", err);
     } finally {
-      setIsLoading(false);
-      setIsLoadingCalendar(false);
+      if (!isBackground) {
+        setIsLoading(false);
+        setIsLoadingCalendar(false);
+      } else {
+        setIsRefreshing(false);
+      }
     }
   };
 
   useEffect(() => {
     setIsMounted(true);
+    
+    // Load from localStorage if present
+    const storedInterval = typeof window !== "undefined" ? localStorage.getItem("dashboard-refresh-interval") : null;
+    if (storedInterval) {
+      setAutoRefreshInterval(storedInterval);
+    }
+
     fetchDashboardData();
 
     const handleRefresh = () => {
@@ -171,6 +197,30 @@ export default function Dashboard() {
       window.removeEventListener("empresa-added", handleRefresh);
     };
   }, []);
+
+  // Set-up auto refresh timer
+  useEffect(() => {
+    if (!isMounted) return;
+    if (autoRefreshInterval === "manual") return;
+
+    let intervalMs = 5 * 60 * 1000; // default 5 minutes
+    if (autoRefreshInterval === "1m") intervalMs = 1 * 60 * 1000;
+    else if (autoRefreshInterval === "15m") intervalMs = 15 * 60 * 1000;
+    else if (autoRefreshInterval === "30m") intervalMs = 30 * 60 * 1000;
+
+    const timer = setInterval(() => {
+      fetchDashboardData(true);
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [autoRefreshInterval, isMounted]);
+
+  const handleAutoRefreshChange = (val: string) => {
+    setAutoRefreshInterval(val);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dashboard-refresh-interval", val);
+    }
+  };
 
   // Save Preferences to Database
   const handleSavePreferences = async (updatedPrefs: typeof preferences) => {
@@ -370,6 +420,41 @@ export default function Dashboard() {
         </div>
 
         <div className="flex gap-2 flex-wrap items-center">
+          {/* Seletor de Atualização Automática */}
+          <div className="flex items-center gap-2 bg-neutral-50 border border-outline-variant/60 rounded px-2.5 py-1.5 text-[10px] font-bold text-[#1B365D]">
+            <Clock size={12} className="text-[#1B365D]" />
+            <span className="uppercase tracking-wider mr-1 text-neutral-500 font-bold hidden sm:inline">Refresh:</span>
+            <select
+              value={autoRefreshInterval}
+              onChange={(e) => handleAutoRefreshChange(e.target.value)}
+              className="bg-transparent border-none text-[10px] font-black uppercase tracking-wider text-[#1B365D] focus:outline-none focus:ring-0 cursor-pointer pr-1"
+              style={{ WebkitAppearance: "none", MozAppearance: "none" }}
+            >
+              <option value="manual" className="text-xs bg-white text-neutral-800">Manual</option>
+              <option value="1m" className="text-xs bg-white text-neutral-800">1 min</option>
+              <option value="5m" className="text-xs bg-white text-neutral-800">5 min</option>
+              <option value="15m" className="text-xs bg-white text-neutral-800">15 min</option>
+              <option value="30m" className="text-xs bg-white text-neutral-800">30 min</option>
+            </select>
+            
+            {/* Visual indicator of refresh status or last update */}
+            <div className="flex items-center gap-1.5 pl-2 border-l border-outline-variant/60 ml-1 font-mono text-[9px] text-[#1B365D]/70 font-semibold select-none">
+              <button 
+                onClick={() => fetchDashboardData(true)} 
+                title="Atualizar agora"
+                className="hover:text-[#1B365D] active:scale-95 transition-all text-neutral-500 flex items-center justify-center p-0.5"
+                disabled={isRefreshing}
+              >
+                <RefreshCw size={11} className={cn("transition-all duration-700", isRefreshing && "animate-spin text-[#1B365D]")} />
+              </button>
+              {lastUpdated && (
+                <span title="Última atualização automática/manual" className="hidden xs:inline">
+                  {lastUpdated}
+                </span>
+              )}
+            </div>
+          </div>
+
           <button 
             onClick={() => setShowConfigModal(true)}
             id="toggle-preferences-btn"
@@ -435,7 +520,9 @@ export default function Dashboard() {
                   <span className="text-[9px] text-white/50 font-black uppercase">Consolidação</span>
                   <span className="text-xs font-mono font-bold">Base RFB {stats?.ano || "2025"}</span>
                 </div>
-                {!(isPathBlocked("/esocial", user).blocked || (user?.permissoes && user?.permissoes?.importarXml === false)) && (
+                {!(isPathBlocked("/esocial", user).blocked || 
+                   (user?.modulosBloqueados || "").toLowerCase().split(",").map((s: string) => s.trim()).includes("esocial") || 
+                   (user?.permissoes && (user?.permissoes?.esocial === false || user?.permissoes?.importarXml === false))) && (
                   <>
                     <button 
                       onClick={triggerXmlUpload}
@@ -829,7 +916,9 @@ export default function Dashboard() {
                 <History size={16} className="text-[#1B365D]" />
                 Logs e Últimos Processamentos (Compensações)
               </h3>
-              {!isPathBlocked("/esocial", user).blocked && (
+              {!(isPathBlocked("/esocial", user).blocked || 
+                 (user?.modulosBloqueados || "").toLowerCase().split(",").map((s: string) => s.trim()).includes("esocial") ||
+                 (user?.permissoes && user?.permissoes?.esocial === false)) && (
                 <Link href="/esocial" className="text-[9px] font-black uppercase text-[#1B365D] hover:underline flex items-center tracking-wider bg-neutral-100 hover:bg-neutral-200 py-1.5 px-3 border rounded border-neutral-200/50">
                   Auditoria Completa <ChevronRight size={12} className="ml-0.5" />
                 </Link>
@@ -924,7 +1013,11 @@ export default function Dashboard() {
         )}
 
         {/* BLOCO 8 — AÇÕES RÁPIDAS INTELIGENTES */}
-        {preferences.widgets.includes("acoes-rapidas") && (
+        {preferences.widgets.includes("acoes-rapidas") && 
+         !(user?.modulosBloqueados || "").toLowerCase().split(",").map((s: string) => s.trim()).includes("acoes-rapidas") && 
+         !(user?.permissoes?.["acoes-rapidas"] === false) &&
+         !(user?.permissoes?.visualizarDashboard === false) &&
+         !user?.bloqueadoGerais && (
           <div className="lg:col-span-12 border border-outline-variant bg-white p-6 rounded-sm shadow-sm flex flex-col gap-4">
             <h3 className="text-xs font-black text-[#1B365D] uppercase tracking-wider pb-3 border-b border-outline-variant/60">
               ⚡ Centro de Ações Rápidas Inteligentes do Compliance

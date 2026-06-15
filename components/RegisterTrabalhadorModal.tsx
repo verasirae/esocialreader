@@ -38,9 +38,14 @@ export function RegisterTrabalhadorModal() {
   const fetchEmpresas = async () => {
     try {
       const res = await fetch("/api/esocial/empresas?pageSize=100");
-      const data = await res.json();
-      if (data.data) {
-        setEmpresas(data.data);
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (data.data) {
+          setEmpresas(data.data);
+        }
+      } else {
+        console.warn("Retorno não-JSON ao buscar empresas.");
       }
     } catch (err) {
       console.error("Erro ao carregar empresas:", err);
@@ -62,13 +67,20 @@ export function RegisterTrabalhadorModal() {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
-      if (data.success) {
-        alert(`Importação concluída! Processados: ${data.processed}, Erros: ${data.errors}`);
-        window.dispatchEvent(new CustomEvent("trabalhador-added"));
-        closeRegisterTrabalhadorModal();
+      
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (data.success) {
+          alert(`Importação concluída! Processados: ${data.processed}, Erros: ${data.errors}`);
+          window.dispatchEvent(new CustomEvent("trabalhador-added"));
+          closeRegisterTrabalhadorModal();
+        } else {
+          throw new Error(data.error || "Erro na importação");
+        }
       } else {
-        throw new Error(data.error || "Erro na importação");
+        const text = await res.text();
+        throw new Error("O servidor retornou uma resposta inesperada: " + (text.substring(0, 100) || "Sem conteúdo"));
       }
     } catch (err: any) {
       alert(err.message);
