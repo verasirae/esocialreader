@@ -78,6 +78,7 @@ model Empresa {
   consolidacoes       S5002ConsolidadoPeriodo[]
   consolidacoesAnuais S5002ConsolidadoAnual[]
   certificados        CertificadoDigital[]
+  sincronizacoes      EsocialSincronizacao[]
 
   prestadores       PrestadorServico[]
   reinfLotes        ReinfLote[]
@@ -682,21 +683,69 @@ model OperadoraSaude {
 //////////////////////////////////////////////////////
 
 model CertificadoDigital {
-  id String @id @default(cuid())
+  id                  String   @id @default(cuid())
 
-  empresaId String  @map("empresa_id")
-  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  empresaId           String   @map("empresa_id")
+  empresa             Empresa  @relation(fields: [empresaId], references: [id])
 
-  nome               String
-  validade           DateTime
-  fingerprint        String?
-  senhaCriptografada String   @map("senha_criptografada")
-  storagePath        String   @map("storage_path")
+  nome                String
+  validade            DateTime
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  // CNPJ ou CPF que assina — deve bater com o certificado
+  nrInscCert          String?  @map("nr_insc_cert")
+
+  fingerprint         String?
+
+  // Senha criptografada com AES-256 (mesma chave do SESSION_SECRET)
+  senhaCriptografada  String   @map("senha_criptografada")
+
+  // Caminho do arquivo .pfx/.p12 no storage local do servidor
+  storagePath         String   @map("storage_path")
+
+  // Ambiente: "producao" | "producao_restrita"
+  ambiente            String   @default("producao") @map("ambiente")
+
+  ativo               Boolean  @default(true)
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt      @map("updated_at")
+
+  sincronizacoes EsocialSincronizacao[]
 
   @@map("certificado_digital")
+}
+
+// Controle de cada execução de sincronização automática
+model EsocialSincronizacao {
+  id                    String   @id @default(cuid())
+
+  empresaId             String   @map("empresa_id")
+  empresa               Empresa  @relation(fields: [empresaId], references: [id])
+
+  certificadoId         String   @map("certificado_id")
+  certificado           CertificadoDigital @relation(fields: [certificadoId], references: [id])
+
+  // Período consultado: "2025-03", "2025-04" etc.
+  perApur               String   @map("per_apur")
+
+  // Status: "executando" | "concluido" | "erro" | "bloqueado"
+  status                String   @default("executando")
+
+  // Última data/hora retornada pelo eSocial (para paginação)
+  dhUltimoEvtRetornado  String?  @map("dh_ultimo_evt_retornado")
+
+  totalIdentificadores  Int      @default(0) @map("total_identificadores")
+  totalBaixados         Int      @default(0) @map("total_baixados")
+  totalErros            Int      @default(0) @map("total_erros")
+
+  mensagemErro          String?  @db.Text @map("mensagem_erro")
+  logDetalhado          Json?    @map("log_detalhado")
+
+  iniciadoEm   DateTime  @default(now()) @map("iniciado_em")
+  concluidoEm  DateTime? @map("concluido_em")
+
+  @@index([empresaId, perApur])
+  @@map("esocial_sincronizacao")
 }
 
 //////////////////////////////////////////////////////

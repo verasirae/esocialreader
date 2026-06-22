@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { TopBar } from "@/components/TopBar";
 import { useModals } from "@/lib/contexts/ModalContext";
@@ -24,7 +24,9 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="flex min-h-screen bg-background text-on-surface">
       {/* Sidebar Component */}
-      <Sidebar />
+      <Suspense fallback={<div className="w-64 bg-white border-r border-outline-variant"></div>}>
+        <Sidebar />
+      </Suspense>
 
       {/* Mobile Drawer Overlay Backdrop */}
       {isMobileMenuOpen && (

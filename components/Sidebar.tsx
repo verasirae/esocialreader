@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { 
   Grid2X2, 
   Building2, 
@@ -36,13 +36,14 @@ const menuItems = [
   { icon: FileText, label: "EFD-REINF", href: "/reinf" },
   { icon: AlertTriangle, label: "Pendências", href: "/pendencias" },
   { icon: ShieldCheck, label: "Auditoria S-5002", href: "/esocial" },
-  { icon: FileText, label: "DIRF Digital", href: "/consolidacao" },
+  { icon: FileText, label: "DIRF Digital", href: "/consolidacao?dirf=true" },
   { icon: Scale, label: "Códigos de Receita", href: "/codigos-receita" },
   { icon: Calendar, label: "Períodos Fiscais", href: "/periodos" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, logout } = useAuth();
   const { 
     openRegisterEmpresaModal, 
@@ -127,7 +128,13 @@ export function Sidebar() {
             });
           }
           return displayMenuItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isDirfItem = item.href.includes("?dirf=true");
+            const cleanHref = item.href.split("?")[0];
+            const isActive = isDirfItem 
+              ? (pathname === cleanHref && searchParams.get("dirf") === "true")
+              : (item.label === "Consolidação Fiscal" 
+                  ? (pathname === cleanHref && searchParams.get("dirf") !== "true")
+                  : (pathname === cleanHref));
             const blockedInfo = isPathBlocked(item.href, user);
             const isBlocked = blockedInfo.blocked;
 

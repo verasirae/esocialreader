@@ -1,6 +1,16 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer 
+} from "recharts";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -94,6 +104,10 @@ function EsocialTablesContent() {
       title: "Relatórios Fiscais",
       subtitle: "Exporte relatórios consolidados e analíticos do portal de compliance do eSocial.",
     },
+    "Automação S-5002": {
+      title: "Automação eSocial S-5002 & Certificados A1",
+      subtitle: "Configure certificados digitais A1 por empresa e sincronize eventos S-5002 automaticamente do eSocial.",
+    },
   };
   
   // Novas variáveis para Conferência
@@ -133,6 +147,149 @@ function EsocialTablesContent() {
     processedCount: 0,
     errorCount: 0
   });
+
+  // ── AUTOMAÇÃO E CERTIFICADOS ESTADO ───────────────────────────
+  const [empresasSelect, setEmpresasSelect] = useState<any[]>([]);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState("");
+  const [certificadoAtivo, setCertificadoAtivo] = useState<any>(null);
+  const [isCarregandoCerts, setIsCarregandoCerts] = useState(false);
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const [certSenha, setCertSenha] = useState("");
+  const [certAmbiente, setCertAmbiente] = useState<"producao" | "producao_restrita">("producao");
+  const [certNome, setCertNome] = useState("");
+  const [isSalvandoCert, setIsSalvandoCert] = useState(false);
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [sincAnoMes, setSincAnoMes] = useState(new Date().toISOString().substring(0, 7)); // "AAAA-MM"
+  const [isSincronizandoActive, setIsSincronizandoActive] = useState(false);
+  const [sincMessage, setSincMessage] = useState("");
+  const [sincResultado, setSincResultado] = useState<any>(null);
+  const [logsSincronizacoes, setLogsSincronizacoes] = useState<any[]>([]);
+
+  // Carrega empresas quando entra na aba Automação
+  useEffect(() => {
+    if (activeTab === "Automação S-5002") {
+      fetchEmpresasSelect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // Carrega certificado e logs quando seleciona uma nova empresa
+  useEffect(() => {
+    if (activeTab === "Automação S-5002" && selectedEmpresaId) {
+      fetchCertificadoAtivo(selectedEmpresaId);
+      fetchHistoricoSincs(selectedEmpresaId);
+    } else {
+      setCertificadoAtivo(null);
+      setLogsSincronizacoes([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedEmpresaId]);
+
+  const fetchEmpresasSelect = async () => {
+    try {
+      const resp = await safeJsonFetch("/api/esocial/empresas?page=1&search=");
+      if (resp && resp.data) {
+        setEmpresasSelect(resp.data);
+        if (resp.data.length > 0 && !selectedEmpresaId) {
+          setSelectedEmpresaId(resp.data[0].id);
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao carregar empresas para select:", e);
+    }
+  };
+
+  const fetchCertificadoAtivo = async (empresaId: string) => {
+    setIsCarregandoCerts(true);
+    try {
+      const resp = await safeJsonFetch(`/api/certificados?empresaId=${empresaId}`);
+      if (Array.isArray(resp) && resp.length > 0) {
+        setCertificadoAtivo(resp[0]); // sempre pega o mais recente ativo
+      } else {
+        setCertificadoAtivo(null);
+      }
+    } catch (e) {
+      console.error("Erro ao obter certificado ativo:", e);
+      setCertificadoAtivo(null);
+    } finally {
+      setIsCarregandoCerts(false);
+    }
+  };
+
+  const fetchHistoricoSincs = async (empresaId?: string) => {
+    try {
+      const url = empresaId ? `/api/esocial/sincronizar?empresaId=${empresaId}` : "/api/esocial/sincronizar";
+      const resp = await safeJsonFetch(url);
+      if (Array.isArray(resp)) {
+        setLogsSincronizacoes(resp);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar histórico:", e);
+    }
+  };
+
+  const handleUploadCertificado = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEmpresaId || !certFile || !certSenha) {
+      alert("Por favor selecione a empresa, o arquivo do certificado e digite a senha.");
+      return;
+    }
+    setIsSalvandoCert(true);
+    try {
+      const formData = new FormData();
+      formData.append("arquivo", certFile);
+      formData.append("senha", certSenha);
+      formData.append("empresaId", selectedEmpresaId);
+      formData.append("ambiente", certAmbiente);
+      formData.append("nome", certNome || certFile.name);
+
+      const res = await fetch("/api/certificados", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro no upload");
+
+      setCertFile(null);
+      setCertSenha("");
+      setCertNome("");
+      setShowUploadForm(false);
+      fetchCertificadoAtivo(selectedEmpresaId);
+      alert("Certificado cadastrado e ativado com sucesso!");
+    } catch (e: any) {
+      alert("Falha no upload do certificado: " + e.message);
+    } finally {
+      setIsSalvandoCert(false);
+    }
+  };
+
+  const handleSubmeterSincronizacao = async () => {
+    if (!selectedEmpresaId) return;
+    setIsSincronizandoActive(true);
+    setSincMessage("Iniciando comunicação segura TLS com o eSocial...");
+    setSincResultado(null);
+
+    try {
+      const res = await fetch("/api/esocial/sincronizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empresaId: selectedEmpresaId, perApur: sincAnoMes })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro na sincronização");
+
+      setSincResultado(data);
+      setSincMessage("Sincronização concluída com sucesso!");
+      fetchHistoricoSincs(selectedEmpresaId);
+    } catch (e: any) {
+      setSincMessage("");
+      alert("Erro durante sincronização: " + e.message);
+    } finally {
+      setIsSincronizandoActive(false);
+    }
+  };
 
   const checkSyncStatus = async () => {
     try {
@@ -838,6 +995,285 @@ function EsocialTablesContent() {
                         </React.Fragment>
                       ))
                     )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === "Automação S-5002") {
+      return (
+        <div className="flex flex-col gap-8 max-w-5xl mx-auto w-full py-8">
+          {/* Cabeçalho de Seleção de Empresa */}
+          <div className="card bg-white p-6 border border-outline-variant shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-sm">
+            <div className="flex flex-col gap-1.5 flex-1">
+              <label className="text-[10px] font-black text-secondary uppercase tracking-[0.2em] font-mono">Selecione a Empresa de Trabalho</label>
+              <select
+                className="bg-surface border border-outline-variant rounded-sm py-2 px-3 text-xs font-bold w-full md:w-96 focus:ring-1 focus:ring-primary outline-none"
+                value={selectedEmpresaId}
+                onChange={(e) => setSelectedEmpresaId(e.target.value)}
+              >
+                <option value="">Selecione uma empresa...</option>
+                {empresasSelect.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.cnpjRaiz} - {emp.razaoSocial || emp.nomeFantasia}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex gap-3 shrink-0">
+              <button
+                onClick={() => setShowUploadForm(!showUploadForm)}
+                className="btn-outline px-4 py-2 text-xs font-bold bg-white border border-outline-variant text-primary hover:bg-neutral-50 rounded-sm flex items-center gap-2"
+              >
+                {certificadoAtivo ? "Trocar Certificado Digital" : "Cadastrar Certificado Digital"}
+              </button>
+            </div>
+          </div>
+
+          {/* Form de Cadastro do Certificado (Drop-down/Collapse) */}
+          {showUploadForm && (
+            <form onSubmit={handleUploadCertificado} className="card bg-white p-6 border border-outline-variant shadow-sm flex flex-col gap-4 rounded-sm animate-fadeIn">
+              <div className="flex items-center justify-between border-b border-outline-variant pb-3 mb-2">
+                <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider font-mono">Upload de Certificado Digital A1 (.pfx / .p12)</h3>
+                <button type="button" onClick={() => setShowUploadForm(false)} className="text-secondary hover:text-on-surface">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold text-secondary uppercase font-mono">Identificador / Nome Amigável</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Certificado Matriz 2026"
+                    className="bg-surface border border-outline-variant rounded-sm py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    value={certNome}
+                    onChange={(e) => setCertNome(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold text-secondary uppercase font-mono">Senha do Certificado (Passphrase)</label>
+                  <input
+                    type="password"
+                    placeholder="Digite a senha de exportação"
+                    className="bg-surface border border-outline-variant rounded-sm py-2 px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+                    value={certSenha}
+                    onChange={(e) => setCertSenha(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold text-secondary uppercase font-mono">Arquivo .pfx / .p12</label>
+                  <input
+                    type="file"
+                    accept=".pfx,.p12"
+                    className="bg-surface border border-outline-variant rounded-sm py-1.5 px-3 text-xs file:mr-4 file:py-1 file:px-2 file:rounded-xs file:border-0 file:text-[10px] file:font-bold file:bg-neutral-200 file:text-on-surface hover:file:bg-neutral-300"
+                    onChange={(e) => setCertFile(e.target.files ? e.target.files[0] : null)}
+                    required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold text-secondary uppercase font-mono">Ambiente eSocial</label>
+                  <select
+                    className="bg-surface border border-outline-variant rounded-sm py-2.5 px-3 text-xs focus:ring-1 focus:ring-primary outline-none"
+                    value={certAmbiente}
+                    onChange={(e) => setCertAmbiente(e.target.value as any)}
+                  >
+                    <option value="producao">Produção Oficial</option>
+                    <option value="producao_restrita">Produção Restrita (Testes)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-2 border-t border-outline-variant pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowUploadForm(false)}
+                  className="btn-outline px-4 py-2 text-xs font-bold bg-white border border-outline-variant text-secondary hover:bg-neutral-50 rounded-sm"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSalvandoCert}
+                  className="btn-primary px-4 py-2 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSalvandoCert && <Loader2 className="animate-spin" size={14} />}
+                  <span>Salvar e Instalar Certificado</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Duas colunas: Detalhes do Certificado vs. Trigger da Sincronização */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Esquerda: Status do Certificado */}
+            <div className="card bg-white p-6 border border-outline-variant shadow-sm flex flex-col gap-4 rounded-sm">
+              <h3 className="text-xs font-black text-secondary uppercase tracking-[0.15em] font-mono border-b border-outline-variant pb-2">Status do Certificado Digital</h3>
+              {isCarregandoCerts ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="animate-spin text-primary" size={24} />
+                </div>
+              ) : certificadoAtivo ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 p-3 rounded-sm">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
+                      <CheckCheck size={16} />
+                    </div>
+                    <div className="flex flex-col leading-tight">
+                      <span className="text-xs font-bold text-emerald-800">Certificado Instalado e Ativo</span>
+                      <span className="text-[10px] text-emerald-600 font-mono font-bold">Ambiente: {certificadoAtivo.ambiente === "producao" ? "PRODUÇÃO" : "PRODUÇÃO RESTRITA"}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-xs mt-1 border-t border-dashed border-outline-variant/60 pt-3">
+                    <div className="flex flex-col font-mono block min-w-0">
+                      <span className="text-[10px] text-secondary lowercase">nome do arquivo / alias</span>
+                      <span className="font-bold text-on-surface truncate block" title={certificadoAtivo.nome}>{certificadoAtivo.nome}</span>
+                    </div>
+                    <div className="flex flex-col font-mono block min-w-0">
+                      <span className="text-[10px] text-secondary lowercase">vencimento</span>
+                      <span className={`font-bold block ${new Date(certificadoAtivo.validade).getTime() < Date.now() ? "text-red-600" : "text-on-surface"}`}>
+                        {new Date(certificadoAtivo.validade).toLocaleDateString("pt-BR")}
+                      </span>
+                    </div>
+                    <div className="flex flex-col font-mono col-span-2 block min-w-0">
+                      <span className="text-[10px] text-secondary lowercase">fingerprint sha1</span>
+                      <span className="font-bold text-on-surface hover:text-primary transition-colors text-[10px] select-all tracking-wider truncate block" title={certificadoAtivo.fingerprint}>{certificadoAtivo.fingerprint || "-"}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center py-8 px-4 bg-neutral-50/50 rounded-sm border border-dashed border-outline-variant">
+                  <AlertCircle className="text-amber-500 mb-2" size={32} />
+                  <span className="text-xs font-bold text-on-surface">Sem Certificado Ativo</span>
+                  <p className="text-[10px] text-secondary mt-1 max-w-xs">
+                    Cada empresa do grupo exige o upload de seu próprio certificado A1 (.pfx) com a senha de exportação correspondente para realizar chamadas soap seguras mTLS ao eSocial.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Direita: Trigger da Sincronização */}
+            <div className="card bg-white p-6 border border-outline-variant shadow-sm flex flex-col gap-4 rounded-sm">
+              <h3 className="text-xs font-black text-secondary uppercase tracking-[0.15em] font-mono border-b border-outline-variant pb-2">Download Automático S-5002</h3>
+              
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-bold text-secondary uppercase font-mono">Período de Apuração (Mês/Ano)</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" size={14} />
+                    <input
+                      type="month"
+                      className="bg-surface pl-9 pr-3 py-2 w-full text-xs font-bold outline-none focus:ring-1 focus:ring-primary rounded-sm border border-outline-variant"
+                      value={sincAnoMes}
+                      onChange={(e) => setSincAnoMes(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleSubmeterSincronizacao}
+                    disabled={isSincronizandoActive || !certificadoAtivo}
+                    className="btn-primary w-full py-3 text-xs font-bold text-white bg-primary hover:bg-primary/95 rounded-sm disabled:opacity-50 disabled:bg-neutral-200 disabled:text-neutral-500 flex items-center justify-center gap-2"
+                  >
+                    {isSincronizandoActive ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
+                    <span>{isSincronizandoActive ? "Sincronizando com eSocial..." : "Sincronizar Eventos S-5002"}</span>
+                  </button>
+                  
+                  {!certificadoAtivo && (
+                    <span className="text-[9px] text-red-500 font-bold font-mono text-center">Requer Certificado Digital cadastrado e ativo.</span>
+                  )}
+                </div>
+
+                {isSincronizandoActive && (
+                  <div className="flex flex-col gap-2 mt-2 p-3 bg-primary/5 rounded-sm border border-primary/20 animate-pulse">
+                    <span className="text-[10px] font-mono font-bold text-primary">{sincMessage}</span>
+                  </div>
+                )}
+
+                {sincResultado && (
+                  <div className="flex flex-col p-3 bg-emerald-50 border border-emerald-200 rounded-sm text-xs mt-2 font-mono gap-1 animate-fadeIn">
+                    <div className="flex items-center gap-1.5 text-emerald-800 font-bold mb-1">
+                      <CheckCheck size={14} />
+                      <span>Sincronização Concluída</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 text-[10px]">
+                      <span>Baixados: <strong className="text-emerald-700">{sincResultado.baixados}</strong></span>
+                      <span>Erros: <strong className={sincResultado.erros > 0 ? "text-red-700 font-bold" : "text-emerald-700"}>{sincResultado.erros}</strong></span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Seção Inferior: Histórico de Sincronizações */}
+          <div className="card bg-white border border-outline-variant shadow-sm rounded-sm flex flex-col">
+            <div className="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-white rounded-t-sm">
+              <h3 className="text-xs font-black text-secondary uppercase tracking-[0.15em] font-mono">Histórico de Sincronizações do Web Service</h3>
+              <button
+                type="button"
+                onClick={() => fetchHistoricoSincs(selectedEmpresaId)}
+                className="btn-outline px-3 py-1 text-[10px] font-bold bg-white border border-outline-variant hover:bg-neutral-50 flex items-center gap-1"
+              >
+                <History size={12} />
+                <span>Atualizar Lista</span>
+              </button>
+            </div>
+
+            {logsSincronizacoes.length === 0 ? (
+              <div className="p-12 text-center text-xs text-secondary font-medium font-mono italic">
+                Nenhuma sincronização realizada para esta empresa.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-xs text-on-surface">
+                  <thead>
+                    <tr className="bg-surface border-b border-outline-variant text-[10px] font-bold text-secondary uppercase font-mono">
+                      <th className="px-4 py-3">Período</th>
+                      <th className="px-4 py-3">Iniciado Em</th>
+                      <th className="px-4 py-3">Concluído Em</th>
+                      <th className="px-4 py-3">Total Solicitado</th>
+                      <th className="px-4 py-3">Baixados</th>
+                      <th className="px-4 py-3">Erros</th>
+                      <th className="px-4 py-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/60 font-mono">
+                    {logsSincronizacoes.map((item) => (
+                      <tr key={item.id} className="hover:bg-surface/50 transition-colors">
+                        <td className="px-4 py-3 font-bold text-primary">{item.perApur}</td>
+                        <td className="px-4 py-3 text-secondary">{new Date(item.iniciadoEm).toLocaleString("pt-BR")}</td>
+                        <td className="px-4 py-3 text-secondary">
+                          {item.concluidoEm ? new Date(item.concluidoEm).toLocaleString("pt-BR") : "-"}
+                        </td>
+                        <td className="px-4 py-3 font-bold">{item.totalIdentificadores}</td>
+                        <td className="px-4 py-3 text-emerald-600 font-bold">{item.totalBaixados}</td>
+                        <td className="px-4 py-3 text-red-500 font-bold">{item.totalErros}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={cn(
+                            "inline-block rounded-xs px-2.5 py-1 text-[9px] font-black uppercase tracking-wider",
+                            item.status === "concluido" && "bg-emerald-100 text-emerald-800",
+                            item.status === "executando" && "bg-amber-100 text-amber-800 animate-pulse",
+                            item.status === "erro" && "bg-red-100 text-red-800"
+                          )}>
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -2050,7 +2486,7 @@ function EsocialTablesContent() {
         </div>
 
         <nav className="flex items-center gap-1 overflow-x-auto whitespace-nowrap max-w-full w-full xl:w-auto py-1 xl:py-0 scrollbar-none scroll-smooth">
-          {["Auditoria S-5002", "Conferência DIRF", "Consolidação Anual", "Divergências Fiscais", "Importar XML", "Tabelas", "Histórico", "Relatórios"].map((tab) => (
+          {["Auditoria S-5002", "Conferência DIRF", "Consolidação Anual", "Divergências Fiscais", "Importar XML", "Automação S-5002", "Tabelas", "Histórico", "Relatórios"].map((tab) => (
             <button
               key={tab}
               onClick={() => {

@@ -184,25 +184,27 @@ function ConsolidacaoFiscalContent() {
     else setSelectedMonth(null);
   }, [searchParams]);
 
+  const isDirf = searchParams.get("dirf") === "true";
+
   const handleYearSelect = (year: string) => {
     setSelectedYear(year);
     setSelectedMonth(null);
-    router.push(`/consolidacao?ano=${year}`);
+    router.push(`/consolidacao?ano=${year}${isDirf ? "&dirf=true" : ""}`);
   };
 
   const handleMonthSelect = (month: string | null) => {
     setSelectedMonth(month);
     if (month) {
-      router.push(`/consolidacao?ano=${selectedYear}&mes=${month}`);
+      router.push(`/consolidacao?ano=${selectedYear}&mes=${month}${isDirf ? "&dirf=true" : ""}`);
     } else {
-      router.push(`/consolidacao?ano=${selectedYear}`);
+      router.push(`/consolidacao?ano=${selectedYear}${isDirf ? "&dirf=true" : ""}`);
     }
   };
 
   const handleBackToYears = () => {
     setSelectedYear(null);
     setSelectedMonth(null);
-    router.push("/consolidacao");
+    router.push(`/consolidacao${isDirf ? "?dirf=true" : ""}`);
   };
 
   const currentYearData = useMemo(() => {
@@ -228,6 +230,7 @@ function ConsolidacaoFiscalContent() {
               empresa={empresa} 
               years={yearsData} 
               onSelectYear={handleYearSelect} 
+              isDirf={isDirf}
             />
           ) : (
             <DetailedConsolidationView 
@@ -236,6 +239,7 @@ function ConsolidacaoFiscalContent() {
               selectedYear={selectedYear}
               selectedMonth={selectedMonth}
               yearData={currentYearData}
+              isDirf={isDirf}
               activeTab={activeTab}
               setActiveTab={setActiveTab}
               onSelectMonth={handleMonthSelect}
@@ -270,7 +274,7 @@ function ConsolidacaoFiscalContent() {
 
 // --- Components ---
 
-function YearSelectionView({ empresa, years, onSelectYear }: any) {
+function YearSelectionView({ empresa, years, onSelectYear, isDirf }: any) {
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -281,8 +285,12 @@ function YearSelectionView({ empresa, years, onSelectYear }: any) {
       <div className="bg-white border border-outline-variant p-6 rounded-sm shadow-sm">
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h1 className="text-lg font-bold text-on-surface tracking-tight">Imposto sobre a Renda Retido na Fonte - IRRF</h1>
-            <p className="text-secondary text-xs">Demonstrativo Consolidado</p>
+            <h1 className="text-lg font-bold text-[#1B365D] tracking-tight uppercase">
+              {isDirf ? "Declaração de IRRF Digital - Escrituração DIRF" : "Imposto sobre a Renda Retido na Fonte - IRRF"}
+            </h1>
+            <p className="text-secondary text-xs uppercase font-semibold font-mono tracking-wider mt-0.5">
+              {isDirf ? "Demonstrativo Anual de Beneficiários e Retenções" : "Demonstrativo Consolidado de Retenções"}
+            </p>
           </div>
           <div className="text-[10px] text-secondary">Versão 1.0.2</div>
         </div>
@@ -675,8 +683,12 @@ function DetailedConsolidationView({
       <div className="bg-white border border-outline-variant p-6 rounded-sm shadow-sm">
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h1 className="text-lg font-bold text-on-surface tracking-tight">Imposto sobre a Renda Retido na Fonte - IRRF - {selectedYear}</h1>
-            <p className="text-secondary text-xs">Demonstrativo Consolidado</p>
+            <h1 className="text-lg font-bold text-[#1B365D] tracking-tight uppercase">
+              {isDirf ? `DIRF Digital - Escrituração Anual - ${selectedYear}` : `Imposto sobre a Renda Retido na Fonte - IRRF - ${selectedYear}`}
+            </h1>
+            <p className="text-secondary text-xs uppercase font-semibold font-mono tracking-wider mt-0.5">
+              {isDirf ? "Consolidação e Informativo de Rendimentos" : "Demonstrativo Consolidado"}
+            </p>
           </div>
         </div>
 
