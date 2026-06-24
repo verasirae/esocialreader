@@ -102,7 +102,11 @@ export default function SettingsPage() {
       const resp = await fetch(`/api/certificados?empresaId=${empId}`);
       if (resp.ok) {
         const data = await resp.json();
-        setCertificadoAtivo(data || null);
+        if (Array.isArray(data) && data.length > 0) {
+          setCertificadoAtivo(data[0]);
+        } else {
+          setCertificadoAtivo(null);
+        }
       } else {
         setCertificadoAtivo(null);
       }
