@@ -26,7 +26,12 @@ export async function GET(req: NextRequest) {
       prisma.trabalhador.count({ where: empresaFilter }),
       prisma.operadoraSaude.count(),
       prisma.s5002ConsolidadoAnual.count({ where: empresaFilter }),
-      prisma.divergenciaFiscal.count({ where: { resolvido: false, ...empresaFilter } }),
+      prisma.divergenciaFiscal.count({
+        where: {
+          resolvido: false,
+          ...(empresaId ? { evento: { empresaId } } : {})
+        }
+      }),
       prisma.esocialEvento.findMany({
         where: empresaFilter,
         select: { perApur: true },
