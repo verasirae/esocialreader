@@ -4,7 +4,13 @@ import { safeJson } from "@/lib/api-utils";
 
 export async function GET(req: NextRequest) {
   try {
+    const { getActiveEmpresaId } = await import("@/lib/auth-server");
+    const empresaId = await getActiveEmpresaId(req);
+
     const consolidacoes = await prisma.s5002ConsolidadoAnual.findMany({
+      where: {
+        ...(empresaId ? { empresaId } : {})
+      },
       include: {
         empresa: {
           select: { razaoSocial: true, cnpjRaiz: true }

@@ -4,6 +4,10 @@ import { safeJson } from "@/lib/api-utils";
 
 export async function GET(req: NextRequest) {
   try {
+    const { getActiveEmpresaId } = await import("@/lib/auth-server");
+    const empresaId = await getActiveEmpresaId(req);
+    const empresaFilter = empresaId ? { empresaId } : {};
+
     const [t01, t03, t05, t21, t25, t54, t78, t80, logs, s5002Count, empresasCount, trabalhadoresCount, operadorasCount, fechamentosCount, divergenciasFiscaisCount, eventosComPeriodo] = await Promise.all([
       prisma.esocialTabela01.count(),
       prisma.esocialTabela03.count(),
@@ -17,13 +21,14 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: "desc" },
         take: 20
       }),
-      prisma.esocialEvento.count({ where: { tpEvento: "S-5002" } }),
+      prisma.esocialEvento.count({ where: { tpEvento: "S-5002", ...empresaFilter } }),
       prisma.empresa.count(),
-      prisma.trabalhador.count(),
+      prisma.trabalhador.count({ where: empresaFilter }),
       prisma.operadoraSaude.count(),
-      prisma.s5002ConsolidadoAnual.count(),
-      prisma.divergenciaFiscal.count({ where: { resolvido: false } }),
+      prisma.s5002ConsolidadoAnual.count({ where: empresaFilter }),
+      prisma.divergenciaFiscal.count({ where: { resolvido: false, ...empresaFilter } }),
       prisma.esocialEvento.findMany({
+        where: empresaFilter,
         select: { perApur: true },
         distinct: ['perApur'],
         orderBy: { perApur: 'desc' },

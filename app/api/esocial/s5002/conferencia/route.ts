@@ -4,6 +4,9 @@ import { safeJson } from "@/lib/api-utils";
 
 export async function GET(req: NextRequest) {
   try {
+    const { getActiveEmpresaId } = await import("@/lib/auth-server");
+    const empresaId = await getActiveEmpresaId(req);
+
     const { searchParams } = new URL(req.url);
     const trabalhadorId = searchParams.get("trabalhadorId");
     const ano = searchParams.get("ano");
@@ -15,6 +18,7 @@ export async function GET(req: NextRequest) {
     const events = await prisma.esocialEvento.findMany({
       where: {
         trabalhadorId,
+        ...(empresaId ? { empresaId } : {}),
         perApur: { startsWith: ano },
         ativo: true,
         tpEvento: "S-5002"

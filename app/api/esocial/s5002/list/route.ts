@@ -4,6 +4,9 @@ import { safeJson } from "@/lib/api-utils";
 
 export async function GET(req: NextRequest) {
   try {
+    const { getActiveEmpresaId } = await import("@/lib/auth-server");
+    const empresaId = await getActiveEmpresaId(req);
+
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
     const search = searchParams.get("search") || "";
@@ -13,6 +16,7 @@ export async function GET(req: NextRequest) {
 
     const where: any = {
       tpEvento: "S-5002",
+      ...(empresaId ? { empresaId } : {}),
       ...(ano ? { perApur: { startsWith: ano } } : {}),
       OR: [
         { trabalhador: { cpf: { contains: search } } },

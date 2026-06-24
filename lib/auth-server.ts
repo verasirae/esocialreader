@@ -115,3 +115,32 @@ export async function clearSessionCookie() {
     maxAge: 0,
   });
 }
+
+// Extract active empresaId from request or server headers context
+export async function getActiveEmpresaId(req?: Request): Promise<string | null> {
+  // Try passed request first
+  if (req) {
+    const empIdHeader = req.headers.get("x-empresa-id") || req.headers.get("X-Empresa-Id");
+    if (empIdHeader) return empIdHeader;
+
+    try {
+      const url = new URL(req.url);
+      const queryEmpId = url.searchParams.get("empresaId") || url.searchParams.get("activeEmpresaId");
+      if (queryEmpId) return queryEmpId;
+    } catch (e) {
+      // ignore url error
+    }
+  }
+
+  // Fallback to Server Headers Context
+  try {
+    const { headers } = await import("next/headers");
+    const headersList = await headers();
+    const empIdHeader = headersList.get("x-empresa-id") || headersList.get("X-Empresa-Id");
+    if (empIdHeader) return empIdHeader;
+  } catch (e) {
+    // ignore if headers context is not available
+  }
+
+  return null;
+}

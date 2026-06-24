@@ -55,15 +55,22 @@ export async function safeJsonFetch<T = any>(url: string, options?: RequestInit)
       finalUrl = `${url}${separator}_t=${Date.now()}`;
     }
 
+    const activeEmpresaId = typeof window !== "undefined" ? localStorage.getItem("active_empresa_id") : null;
+    const mergedHeaders: Record<string, string> = {
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
+      ...(options?.headers as Record<string, string> || {})
+    };
+
+    if (activeEmpresaId) {
+      mergedHeaders["X-Empresa-Id"] = activeEmpresaId;
+    }
+
     const mergedOptions: RequestInit = {
       ...options,
       cache: options?.cache || "no-store",
-      headers: {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0",
-        ...(options?.headers || {})
-      }
+      headers: mergedHeaders
     };
 
     const response = await fetchWithRetry(finalUrl, mergedOptions);

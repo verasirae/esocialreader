@@ -1,13 +1,14 @@
 "use client";
 
-import React, { Suspense } from "react";
+import React, { Suspense, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { TopBar } from "@/components/TopBar";
 import { useModals } from "@/lib/contexts/ModalContext";
 import { cn, isPathBlocked } from "@/lib/utils";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { useEmpresa } from "@/lib/contexts/EmpresaContext";
 import { usePathname } from "next/navigation";
-import { ShieldAlert, ArrowLeft, Lock, FileX } from "lucide-react";
+import { ShieldAlert, ArrowLeft, Lock, FileX, Building, Search, Plus, LogOut, ArrowRight, Shield } from "lucide-react";
 import Link from "next/link";
 
 interface AppLayoutProps {
@@ -15,11 +16,145 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { isSidebarCollapsed, isMobileMenuOpen, setIsMobileMenuOpen } = useModals();
-  const { user } = useAuth();
+  const { isSidebarCollapsed, isMobileMenuOpen, setIsMobileMenuOpen, openRegisterEmpresaModal } = useModals();
+  const { user, logout } = useAuth();
+  const { activeEmpresa, empresas, setEmpresa, isLoading: isEmpresaLoading } = useEmpresa();
   const pathname = usePathname();
+  const [searchQuery, setSearchQuery] = useState("");
 
   const blockCheck = isPathBlocked(pathname, user);
+
+  // If company context is loading, show a professional loading indicator
+  if (isEmpresaLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin text-primary rounded-full h-8 w-8 border-b-2 border-[#1B365D]" />
+          <span className="text-[10px] font-black text-secondary uppercase tracking-[0.2em]">Carregando Organizações...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // If user is logged in, but no company is selected, show the mandatory selector screen
+  if (user && !activeEmpresa) {
+    const filtered = empresas.filter((emp) => {
+      const q = searchQuery.toLowerCase();
+      return (
+        (emp.razaoSocial || "").toLowerCase().includes(q) ||
+        (emp.nomeFantasia || "").toLowerCase().includes(q) ||
+        (emp.cnpjRaiz || "").toLowerCase().includes(q) ||
+        (emp.cnpjCompleto || "").toLowerCase().includes(q)
+      );
+    });
+
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#f0f2f5] p-4">
+        <div className="w-full max-w-2xl bg-white rounded-lg shadow-2xl overflow-hidden border border-outline-variant flex flex-col md:max-h-[85vh]">
+          {/* Header */}
+          <div className="bg-[#1B365D] text-white p-6 md:p-8 shrink-0 flex justify-between items-center">
+            <div>
+              <div className="flex items-center gap-2">
+                <Shield size={20} className="stroke-[2.5]" />
+                <h1 className="text-lg md:text-xl font-black uppercase tracking-tight">Compliance Portal</h1>
+              </div>
+              <p className="text-white/70 text-xs mt-1 font-semibold">
+                Olá, {user.nome}. Por favor, selecione uma empresa para iniciar seu expediente de auditoria.
+              </p>
+            </div>
+            <button
+              onClick={logout}
+              className="p-2 hover:bg-white/10 rounded-full text-white/80 hover:text-white transition-all active:scale-95"
+              title="Fazer Logout"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div className="p-4 border-b border-outline-variant bg-neutral-50 shrink-0">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-3 text-secondary" />
+              <input
+                type="text"
+                placeholder="Filtrar por Razão Social, Nome Fantasia ou CNPJ..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-white text-xs font-semibold rounded border border-outline-variant outline-none focus:border-[#1B365D] shadow-inner"
+              />
+            </div>
+          </div>
+
+          {/* Companies list */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-3 min-h-[250px]">
+            {filtered.length === 0 ? (
+              <div className="text-center py-12 flex flex-col items-center gap-2">
+                <Building size={32} className="text-secondary/40" />
+                <p className="text-xs text-secondary font-semibold">Nenhuma empresa ou empregador cadastrado com esse termo.</p>
+                {(user?.perfil === "superAdmin" || user?.perfil === "Admin" || user?.perfil?.toUpperCase() === "SUPER_ADMIN" || user?.perfil?.toUpperCase() === "ADMIN") && (
+                  <button
+                    onClick={openRegisterEmpresaModal}
+                    className="mt-2 flex items-center gap-1 text-[10px] bg-[#1B365D] hover:bg-[#152a49] text-white font-black uppercase tracking-wider py-2 px-4 rounded transition-all shadow-md active:scale-95"
+                  >
+                    <Plus size={12} />
+                    Cadastrar Primeira Empresa
+                  </button>
+                )}
+              </div>
+            ) : (
+              filtered.map((emp) => (
+                <button
+                  key={emp.id}
+                  onClick={() => setEmpresa(emp)}
+                  className="w-full text-left p-4 rounded-md border border-outline-variant hover:border-[#1B365D] hover:bg-[#1B365D]/5 transition-all flex justify-between items-center cursor-pointer group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3.5 pr-2">
+                    <div className="w-9 h-9 rounded bg-[#1B365D]/5 text-[#1B365D] flex items-center justify-center shrink-0 border border-[#1B365D]/10">
+                      <Building size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-neutral-900 group-hover:text-[#1B365D] transition-colors line-clamp-1">
+                        {emp.razaoSocial || "Razão Social Não Informada"}
+                      </h4>
+                      {emp.nomeFantasia && (
+                        <p className="text-[10px] text-secondary font-semibold line-clamp-1 mt-0.5">{emp.nomeFantasia}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1.5 text-[9px] text-secondary font-mono font-bold uppercase tracking-wider">
+                        <span>CNPJ Raiz: {emp.cnpjRaiz}</span>
+                        {emp.cnpjCompleto && (
+                          <>
+                            <span className="text-neutral-300">•</span>
+                            <span>CNPJ Completo: {emp.cnpjCompleto}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="w-6 h-6 rounded-full bg-neutral-50 border border-outline-variant flex items-center justify-center text-secondary group-hover:bg-[#1B365D] group-hover:text-white group-hover:border-[#1B365D] transition-all">
+                    <ArrowRight size={12} className="stroke-[2.5]" />
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 bg-neutral-50 border-t border-outline-variant flex justify-between items-center shrink-0 text-[10px] font-mono font-bold text-secondary uppercase">
+            <span>Sessão: {user.nome} ({user.perfil})</span>
+            {(user?.perfil === "superAdmin" || user?.perfil === "Admin" || user?.perfil?.toUpperCase() === "SUPER_ADMIN" || user?.perfil?.toUpperCase() === "ADMIN") && empresas.length > 0 && (
+              <button
+                onClick={openRegisterEmpresaModal}
+                className="flex items-center gap-1 text-[10px] bg-[#1B365D] hover:bg-[#152a49] text-white font-black uppercase tracking-wider py-1.5 px-3 rounded transition-all active:scale-95"
+              >
+                <Plus size={12} />
+                Nova Empresa
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-background text-on-surface">

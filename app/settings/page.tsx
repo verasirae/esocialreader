@@ -19,9 +19,16 @@ import {
   Plus,
   Loader2,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  CloudUpload,
+  FileText,
+  AlertCircle,
+  X,
+  CheckCheck,
+  Calendar
 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { useEmpresa } from "@/lib/contexts/EmpresaContext";
 import { usePathname } from "next/navigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { cn } from "@/lib/utils";
@@ -37,7 +44,18 @@ interface UsuarioData {
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<"general" | "users">("general");
+  const { activeEmpresaId, activeEmpresa } = useEmpresa();
+  const [activeTab, setActiveTab] = useState<"general" | "users" | "certificado">("general");
+
+  // Certificados Digitais state
+  const [certificadoAtivo, setCertificadoAtivo] = useState<any>(null);
+  const [isCarregandoCerts, setIsCarregandoCerts] = useState(false);
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const [certSenha, setCertSenha] = useState("");
+  const [certAmbiente, setCertAmbiente] = useState<"producao" | "producao_restrita">("producao");
+  const [certNome, setCertNome] = useState("");
+  const [isSalvandoCert, setIsSalvandoCert] = useState(false);
+  const [showUploadForm, setShowUploadForm] = useState(false);
 
   // User list state
   const [usuarios, setUsuarios] = useState<UsuarioData[]>([]);
@@ -78,12 +96,71 @@ export default function SettingsPage() {
     }
   };
 
+  const fetchCertificadoAtivo = async (empId: string) => {
+    setIsCarregandoCerts(true);
+    try {
+      const resp = await fetch(`/api/certificados?empresaId=${empId}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        setCertificadoAtivo(data || null);
+      } else {
+        setCertificadoAtivo(null);
+      }
+    } catch (e) {
+      console.error("Erro ao obter certificado ativo:", e);
+      setCertificadoAtivo(null);
+    } finally {
+      setIsCarregandoCerts(false);
+    }
+  };
+
+  const handleUploadCertificado = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeEmpresaId || !certFile || !certSenha || !certNome) {
+      alert("Por favor selecione o arquivo do certificado e digite a senha.");
+      return;
+    }
+    setIsSalvandoCert(true);
+    try {
+      const formData = new FormData();
+      formData.append("empresaId", activeEmpresaId);
+      formData.append("file", certFile);
+      formData.append("senha", certSenha);
+      formData.append("ambiente", certAmbiente);
+      formData.append("nome", certNome);
+
+      const res = await fetch("/api/certificados", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Erro no envio");
+      }
+
+      alert("Certificado digital instalado e validado com sucesso!");
+      setCertFile(null);
+      setCertSenha("");
+      setCertNome("");
+      setShowUploadForm(false);
+      fetchCertificadoAtivo(activeEmpresaId);
+    } catch (e: any) {
+      alert("Falha no upload do certificado: " + e.message);
+    } finally {
+      setIsSalvandoCert(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "users") {
       fetchUsuarios();
     }
+    if (activeTab === "certificado" && activeEmpresaId) {
+      fetchCertificadoAtivo(activeEmpresaId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, activeEmpresaId]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,6 +345,16 @@ export default function SettingsPage() {
         >
           <Users size={15} />
           Controle de Acessos
+        </button>
+        <button
+          onClick={() => setActiveTab("certificado")}
+          className={cn(
+            "flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm transition-all flex-1 sm:flex-none",
+            activeTab === "certificado" ? "bg-white text-primary shadow-sm" : "text-secondary hover:text-primary hover:bg-white/40"
+          )}
+        >
+          <Key size={15} />
+          Certificado Digital
         </button>
       </div>
 
@@ -710,6 +797,183 @@ export default function SettingsPage() {
             </div>
           )}
 
+        </div>
+      )}
+
+      {/* Certificado Digital Sub-Module Panel CONTENT */}
+      {activeTab === "certificado" && (
+        <div className="flex flex-col gap-6 max-w-4xl">
+          <div className="card p-6 bg-white flex flex-col gap-5">
+            <div className="flex flex-col gap-1 border-b border-outline-variant/60 pb-4">
+              <h3 className="text-sm font-black text-primary uppercase tracking-wider flex items-center gap-2">
+                <Key size={16} />
+                Gerenciamento do Certificado Digital A1
+              </h3>
+              <p className="text-xs text-secondary font-medium leading-normal">
+                Cada empresa/empregador exige o upload do seu respectivo certificado digital padrão A1 (.pfx/.p12) e a senha de exportação para realizar conexões mTLS seguras com os webservices do eSocial.
+              </p>
+            </div>
+
+            {/* Active Company Display */}
+            <div className="flex items-center justify-between p-4 bg-[#FAF9FC] border border-[#1B365D]/10 rounded-sm">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] uppercase font-black tracking-wider text-[#1B365D]">Empresa Ativa do Contexto</span>
+                {activeEmpresa ? (
+                  <span className="text-xs font-bold text-primary">
+                    {activeEmpresa.razaoSocial || activeEmpresa.nomeFantasia} ({activeEmpresa.cnpjRaiz})
+                  </span>
+                ) : (
+                  <span className="text-xs font-bold text-red-600">Nenhuma empresa ativa selecionada no topo do sistema</span>
+                )}
+              </div>
+              
+              <button
+                type="button"
+                onClick={() => setShowUploadForm(!showUploadForm)}
+                disabled={!activeEmpresaId}
+                className="bg-primary hover:opacity-90 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider px-4 py-2.5 rounded-sm flex items-center gap-2 transition-all shadow-md shrink-0"
+              >
+                <Plus size={15} />
+                {certificadoAtivo ? "Alterar Certificado" : "Cadastrar Certificado"}
+              </button>
+            </div>
+
+            {/* Form de Cadastro do Certificado */}
+            {showUploadForm && activeEmpresaId && (
+              <form onSubmit={handleUploadCertificado} className="border-t border-dashed border-outline-variant/60 pt-4 flex flex-col gap-4 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-primary uppercase tracking-widest font-mono">Novo Envio de Certificado A1</h4>
+                  <button type="button" onClick={() => setShowUploadForm(false)} className="text-secondary hover:text-on-surface">
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-secondary uppercase font-mono">Identificador / Nome Amigável</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Certificado Matriz 2026"
+                      className="w-full text-xs font-semibold text-primary bg-[#FAF9FC] border border-outline-variant/60 rounded-sm px-3.5 py-2 outline-none focus:border-primary focus:bg-white transition-all shadow-sm"
+                      value={certNome}
+                      onChange={(e) => setCertNome(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-secondary uppercase font-mono">Senha do Certificado (Passphrase)</label>
+                    <input
+                      type="password"
+                      placeholder="Digite a senha de exportação"
+                      className="w-full text-xs font-semibold text-primary bg-[#FAF9FC] border border-outline-variant/60 rounded-sm px-3.5 py-2 outline-none focus:border-primary focus:bg-white transition-all shadow-sm"
+                      value={certSenha}
+                      onChange={(e) => setCertSenha(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-secondary uppercase font-mono">Arquivo .pfx / .p12</label>
+                    <input
+                      type="file"
+                      accept=".pfx,.p12"
+                      className="w-full text-xs font-semibold text-primary bg-[#FAF9FC] border border-outline-variant/60 rounded-sm px-3.5 py-1.5 outline-none focus:border-primary focus:bg-white transition-all shadow-sm file:mr-3 file:py-1 file:px-2.5 file:rounded-sm file:border-0 file:text-[10px] file:font-bold file:bg-neutral-200 file:text-on-surface hover:file:bg-neutral-300 cursor-pointer"
+                      onChange={(e) => setCertFile(e.target.files ? e.target.files[0] : null)}
+                      required
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold text-secondary uppercase font-mono">Ambiente eSocial</label>
+                    <select
+                      className="w-full text-xs font-semibold text-primary bg-[#FAF9FC] border border-outline-variant/60 rounded-sm px-3.5 py-2 outline-none focus:border-primary focus:bg-white cursor-pointer"
+                      value={certAmbiente}
+                      onChange={(e) => setCertAmbiente(e.target.value as any)}
+                    >
+                      <option value="producao">Produção Oficial</option>
+                      <option value="producao_restrita">Produção Restrita (Testes)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 border-t border-outline-variant/45 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowUploadForm(false)}
+                    className="border border-outline-variant text-secondary font-bold text-[10px] uppercase tracking-wider px-4 py-2 rounded-sm active:scale-95 transition-all text-center"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSalvandoCert}
+                    className="bg-[#1B365D] hover:bg-[#152a4a] text-white font-bold text-[10px] uppercase tracking-wider px-4 py-2 rounded-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isSalvandoCert && <Loader2 className="animate-spin" size={13} />}
+                    Salvar e Instalar Certificado
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Certificado status card */}
+            <div className="border-t border-outline-variant/50 pt-5">
+              <h4 className="text-xs font-black text-secondary uppercase tracking-[0.15em] font-mono mb-3">Status do Certificado</h4>
+
+              {isCarregandoCerts ? (
+                <div className="flex items-center justify-center py-10">
+                  <LoadingSpinner size="md" />
+                </div>
+              ) : !activeEmpresaId ? (
+                <div className="flex flex-col items-center justify-center text-center py-8 bg-[#FAF9FC] rounded-sm border border-dashed border-outline-variant/75">
+                  <AlertCircle className="text-amber-500 mb-2" size={32} />
+                  <span className="text-xs font-bold text-on-surface">Contexto de Empresa Necessário</span>
+                  <p className="text-[10px] text-secondary mt-1 max-w-xs leading-normal">
+                    Selecione uma empresa de trabalho no seletor de topo para visualizar e gerenciar o respectivo certificado digital.
+                  </p>
+                </div>
+              ) : certificadoAtivo ? (
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 p-3.5 rounded-sm">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
+                      <CheckCheck size={16} />
+                    </div>
+                    <div className="flex flex-col leading-tight">
+                      <span className="text-xs font-bold text-emerald-800">Certificado Instalado e Ativo</span>
+                      <span className="text-[10px] text-emerald-600 font-mono font-bold">Ambiente: {certificadoAtivo.ambiente === "producao" ? "PRODUÇÃO" : "PRODUÇÃO RESTRITA"}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs mt-1 border-t border-dashed border-outline-variant/50 pt-4">
+                    <div className="flex flex-col font-mono block min-w-0">
+                      <span className="text-[10px] text-secondary lowercase">nome do arquivo / alias</span>
+                      <span className="font-bold text-on-surface truncate block" title={certificadoAtivo.nome}>{certificadoAtivo.nome}</span>
+                    </div>
+                    <div className="flex flex-col font-mono block min-w-0">
+                      <span className="text-[10px] text-secondary lowercase">vencimento</span>
+                      <span className={`font-bold block ${new Date(certificadoAtivo.validade).getTime() < Date.now() ? "text-red-600" : "text-on-surface"}`}>
+                        {new Date(certificadoAtivo.validade).toLocaleDateString("pt-BR")}
+                      </span>
+                    </div>
+                    <div className="flex flex-col font-mono sm:col-span-2 block min-w-0">
+                      <span className="text-[10px] text-secondary lowercase">fingerprint sha1</span>
+                      <span className="font-bold text-on-surface hover:text-primary transition-colors text-[10px] select-all tracking-wider truncate block" title={certificadoAtivo.fingerprint}>{certificadoAtivo.fingerprint || "-"}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center py-8 px-4 bg-neutral-50/50 rounded-sm border border-dashed border-outline-variant">
+                  <AlertCircle className="text-amber-500 mb-2" size={32} />
+                  <span className="text-xs font-bold text-on-surface">Sem Certificado Ativo</span>
+                  <p className="text-[10px] text-secondary mt-1 max-w-xs leading-normal">
+                    Não foi encontrado nenhum certificado cadastrado para a empresa <strong>{activeEmpresa?.razaoSocial}</strong>. Realize o upload do arquivo .pfx para habilitar as automações de sincronismo.
+                  </p>
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
       )}
 

@@ -2486,7 +2486,7 @@ function EsocialTablesContent() {
         </div>
 
         <nav className="flex items-center gap-1 overflow-x-auto whitespace-nowrap max-w-full w-full xl:w-auto py-1 xl:py-0 scrollbar-none scroll-smooth">
-          {["Auditoria S-5002", "Conferência DIRF", "Consolidação Anual", "Divergências Fiscais", "Importar XML", "Automação S-5002", "Tabelas", "Histórico", "Relatórios"].map((tab) => (
+          {["Auditoria S-5002", "Conferência DIRF", "Consolidação Anual", "Divergências Fiscais", "Importar XML", "Tabelas", "Histórico", "Relatórios"].map((tab) => (
             <button
               key={tab}
               onClick={() => {

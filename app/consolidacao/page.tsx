@@ -356,6 +356,7 @@ function DetailedConsolidationView({
   selectedYear, 
   selectedMonth, 
   yearData, 
+  isDirf,
   activeTab, 
   setActiveTab, 
   onSelectMonth,

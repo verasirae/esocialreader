@@ -7,8 +7,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
     const search = searchParams.get("search") || "";
-    const pageSize = 10;
-    const skip = (page - 1) * pageSize;
+    const pageSizeParam = searchParams.get("pageSize");
+    const pageSize = pageSizeParam ? parseInt(pageSizeParam) : 10;
+    const skip = pageSizeParam === "all" ? undefined : (page - 1) * pageSize;
+    const take = pageSizeParam === "all" ? undefined : pageSize;
 
     const empresas = await prisma.empresa.findMany({
       where: {
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { cnpjRaiz: "asc" },
       skip,
-      take: pageSize,
+      take,
     });
 
     const total = await prisma.empresa.count({

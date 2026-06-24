@@ -1,46 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getActiveEmpresaId } from "@/lib/auth-server";
 
 export async function GET(req: NextRequest) {
   try {
+    const empresaId = await getActiveEmpresaId(req);
+    if (!empresaId) {
+      return NextResponse.json({ error: "Empresa ativa não selecionada no contexto" }, { status: 400 });
+    }
+
+    const activeEmpresa = await prisma.empresa.findUnique({
+      where: { id: empresaId },
+      select: { cnpjRaiz: true }
+    });
+    const activeCnpjRaiz = activeEmpresa?.cnpjRaiz || "";
+
     // Fetch actual counts from database
-    const totalEmpresas = await prisma.empresa.count();
-    const totalTrabalhadores = await prisma.trabalhador.count();
-    const totalPrestadores = await prisma.prestadorServico.count();
+    const totalEmpresas = 1;
+    const totalTrabalhadores = await prisma.trabalhador.count({ where: { empresaId } });
+    const totalPrestadores = await prisma.prestadorServico.count({ where: { empresaId } });
     
-    const totalEsocialEvents = await prisma.esocialEvento.count({ where: { ativo: true } });
-    const totalReinfEvents = await prisma.reinfEvento.count({ where: { ativo: true } });
+    const totalEsocialEvents = await prisma.esocialEvento.count({ where: { empresaId, ativo: true } });
+    const totalReinfEvents = await prisma.reinfEvento.count({ where: { empresaId, ativo: true } });
     const totalEvents = totalEsocialEvents + totalReinfEvents;
 
     // Count retifications
     const esocialRetifCount = await prisma.esocialEvento.count({
-      where: { ativo: true, indRetif: { gt: 1 } }
+      where: { empresaId, ativo: true, indRetif: { gt: 1 } }
     });
     const reinfRetifCount = await prisma.reinfEvento.count({
-      where: { ativo: true, indRetif: { gt: 1 } }
+      where: { empresaId, ativo: true, indRetif: { gt: 1 } }
     });
     const totalRetif = esocialRetifCount + reinfRetifCount;
 
     // Count active errors / inconsistencies
-    const esocialErrors = await prisma.esocialEvento.count({ where: { status: "erro" } });
-    const reinfErrors = await prisma.reinfEvento.count({ where: { status: "erro" } });
+    const esocialErrors = await prisma.esocialEvento.count({ where: { empresaId, status: "erro" } });
+    const reinfErrors = await prisma.reinfEvento.count({ where: { empresaId, status: "erro" } });
     
     // Count unlinked elements
     const unlinkedCpfs = await prisma.esocialEvento.groupBy({
       by: ['cpfBenef'],
-      where: { trabalhadorId: null, cpfBenef: { not: null } },
+      where: { empresaId, trabalhadorId: null, cpfBenef: { not: null } },
       _count: { _all: true }
     });
     const unlinkedCnpjs = await prisma.esocialEvento.groupBy({
       by: ['cnpjRaiz'],
-      where: { empresaId: null, cnpjRaiz: { not: null } },
+      where: { empresaId: null, cnpjRaiz: activeCnpjRaiz },
       _count: { _all: true }
     });
     const totalInconsistencies = esocialErrors + reinfErrors + unlinkedCpfs.length + unlinkedCnpjs.length;
 
     // Dynamic target year resolution based on record density
     const esocialPeriods = await prisma.s5002ConsolidadoPeriodo.findMany({
-      where: { ativo: true },
+      where: { empresaId, ativo: true },
       select: { periodo: true }
     });
 
@@ -65,12 +77,12 @@ export async function GET(req: NextRequest) {
       targetYear = maxYear;
     } else {
       const latestEsocial = await prisma.esocialEvento.findFirst({
-        where: { ativo: true },
+        where: { empresaId, ativo: true },
         orderBy: { perApur: "desc" },
         select: { perApur: true }
       });
       const latestReinf = await prisma.reinfEvento.findFirst({
-        where: { ativo: true },
+        where: { empresaId, ativo: true },
         orderBy: { perApur: "desc" },
         select: { perApur: true }
       });
@@ -94,6 +106,7 @@ export async function GET(req: NextRequest) {
 
     // Sum consolidated amounts from database
     const esocialSums = await prisma.s5002ConsolidadoAnual.aggregate({
+      where: { empresaId },
       _sum: {
         vlrRendTrib: true,
         vlrIrrf: true,
@@ -105,6 +118,7 @@ export async function GET(req: NextRequest) {
 
     // Sum REINF S-4020 amounts directly
     const reinfSums = await prisma.reinfR4020CRMen.aggregate({
+      where: { r4020: { r4020Evento: { empresaId, evento: { ativo: true } } } },
       _sum: {
         vlrCRMenInf: true,
         vlrBaseCRMen: true
@@ -115,6 +129,14 @@ export async function GET(req: NextRequest) {
     const isentoCodes = ["70", "71", "72", "73", "74", "75", "76", "77", "78", "79", "700", "701", "7950", "7956"];
     const isentosSumObj = await prisma.s5002InfoIR.aggregate({
       where: {
+        dmDev: {
+          s5002Evento: {
+            empresaId,
+            evento: {
+              ativo: true
+            }
+          }
+        },
         tpInfoIR: { in: isentoCodes }
       },
       _sum: {
@@ -132,7 +154,7 @@ export async function GET(req: NextRequest) {
 
     // Fetch active monthly periods and build the monthlySeries dynamically
     const activeMonthlyPeriods = await prisma.s5002ConsolidadoPeriodo.findMany({
-      where: { ativo: true, periodo: { startsWith: `${targetYear}-` } },
+      where: { empresaId, ativo: true, periodo: { startsWith: `${targetYear}-` } },
       select: {
         periodo: true,
         vlrRendTrib: true,
@@ -141,7 +163,7 @@ export async function GET(req: NextRequest) {
     });
 
     const activeReinfRecords = await prisma.reinfR4020CRMen.findMany({
-      where: { r4020: { r4020Evento: { perApur: { startsWith: `${targetYear}-` } } } },
+      where: { r4020: { r4020Evento: { empresaId, perApur: { startsWith: `${targetYear}-` }, evento: { ativo: true } } } },
       select: {
         vlrCRMenInf: true,
         r4020: {
@@ -176,7 +198,7 @@ export async function GET(req: NextRequest) {
 
     // Compute active timeline of events (latest 20)
     const esocialEvents = await prisma.esocialEvento.findMany({
-      where: { ativo: true },
+      where: { empresaId, ativo: true },
       take: 20,
       orderBy: { createdAt: "desc" },
       include: {
@@ -186,7 +208,7 @@ export async function GET(req: NextRequest) {
     });
 
     const reinfEventsObj = await prisma.reinfEvento.findMany({
-      where: { ativo: true },
+      where: { empresaId, ativo: true },
       take: 20,
       orderBy: { createdAt: "desc" },
       include: {

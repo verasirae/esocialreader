@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import { getActiveEmpresaId } from "@/lib/auth-server";
 
 export async function GET(req: NextRequest) {
   try {
+    const empresaId = await getActiveEmpresaId(req);
+    if (!empresaId) {
+      return NextResponse.json({ data: [], total: 0, page: 1, totalPages: 0 });
+    }
+
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
     const search = searchParams.get("search") || "";
@@ -14,6 +18,7 @@ export async function GET(req: NextRequest) {
 
     const trabalhadores = await prisma.trabalhador.findMany({
       where: {
+        empresaId,
         OR: [
           { cpf: { contains: search } },
           { nome: { contains: search, mode: "insensitive" } },
@@ -31,6 +36,7 @@ export async function GET(req: NextRequest) {
 
     const total = await prisma.trabalhador.count({
       where: {
+        empresaId,
         OR: [
           { cpf: { contains: search } },
           { nome: { contains: search, mode: "insensitive" } },

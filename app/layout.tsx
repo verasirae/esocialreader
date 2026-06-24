@@ -4,6 +4,7 @@ import './globals.css';
 import { AppLayout } from '@/components/AppLayout';
 import { ModalProvider } from '@/lib/contexts/ModalContext';
 import { AuthProvider } from '@/lib/contexts/AuthContext';
+import { EmpresaProvider } from '@/lib/contexts/EmpresaContext';
 import { RegisterEmpresaModal } from '@/components/RegisterEmpresaModal';
 import { RegisterTrabalhadorModal } from '@/components/RegisterTrabalhadorModal';
 import { RegisterOperadoraModal } from '@/components/RegisterOperadoraModal';
@@ -24,10 +25,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning className="font-sans antialiased text-on-surface">
         <ModalProvider>
           <AuthProvider>
-            <RegisterEmpresaModal />
-            <RegisterTrabalhadorModal />
-            <RegisterOperadoraModal />
-            <AppLayout>{children}</AppLayout>
+            <EmpresaProvider>
+              <RegisterEmpresaModal />
+              <RegisterTrabalhadorModal />
+              <RegisterOperadoraModal />
+              <AppLayout>{children}</AppLayout>
+            </EmpresaProvider>
           </AuthProvider>
         </ModalProvider>
       </body>

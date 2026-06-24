@@ -21,7 +21,8 @@ import {
   Database,
   Scale,
   Lock,
-  Calendar
+  Calendar,
+  Download
 } from "lucide-react";
 import { cn, isPathBlocked } from "@/lib/utils";
 import { useModals } from "@/lib/contexts/ModalContext";
@@ -36,6 +37,7 @@ const menuItems = [
   { icon: FileText, label: "EFD-REINF", href: "/reinf" },
   { icon: AlertTriangle, label: "Pendências", href: "/pendencias" },
   { icon: ShieldCheck, label: "Auditoria S-5002", href: "/esocial" },
+  { icon: Download, label: "Automação S-5002", href: "/esocial-automacao" },
   { icon: FileText, label: "DIRF Digital", href: "/consolidacao?dirf=true" },
   { icon: Scale, label: "Códigos de Receita", href: "/codigos-receita" },
   { icon: Calendar, label: "Períodos Fiscais", href: "/periodos" },

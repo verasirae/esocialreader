@@ -1,21 +1,35 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Bell, Settings, Menu, ShieldAlert, ArrowLeftRight, Loader2, UserCog } from "lucide-react";
+import { Bell, Settings, Menu, ShieldAlert, ArrowLeftRight, Loader2, UserCog, Building, Search, X, Plus } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { useEmpresa } from "@/lib/contexts/EmpresaContext";
 import Link from "next/link";
 
 export function TopBar() {
-  const { isMobileMenuOpen, setIsMobileMenuOpen } = useModals();
+  const { isMobileMenuOpen, setIsMobileMenuOpen, openRegisterEmpresaModal } = useModals();
   const { user, refreshUser } = useAuth();
+  const { activeEmpresa, empresas, setEmpresa } = useEmpresa();
   const [unimpersonating, setUnimpersonating] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [stats, setStats] = useState({
     unlinkedCpfsCount: 0,
     unlinkedCnpjsCount: 0,
     pendingErrorsCount: 0
+  });
+
+  const filteredCompanies = empresas.filter((emp) => {
+    const q = searchQuery.toLowerCase();
+    return (
+      (emp.razaoSocial || "").toLowerCase().includes(q) ||
+      (emp.nomeFantasia || "").toLowerCase().includes(q) ||
+      (emp.cnpjRaiz || "").toLowerCase().includes(q) ||
+      (emp.cnpjCompleto || "").toLowerCase().includes(q)
+    );
   });
 
   const fetchPendencies = async () => {
@@ -77,14 +91,36 @@ export function TopBar() {
           </button>
 
           {/* System branding text */}
-          <span className="text-sm md:text-base lg:text-lg font-black text-primary tracking-tight truncate max-w-[150px] sm:max-w-xs md:max-w-none">
+          <span className="text-sm md:text-base lg:text-lg font-black text-primary tracking-tight truncate max-w-[120px] sm:max-w-xs md:max-w-none">
             Tax Compliance System
           </span>
           
           <div className="hidden sm:block h-6 w-[1px] bg-outline-variant"></div>
-          <span className="hidden sm:inline text-xs md:text-sm font-bold text-secondary uppercase tracking-tight">
-            S-5002 Compliance Portal
-          </span>
+          
+          {/* Active Company Selector Button */}
+          {activeEmpresa ? (
+            <button
+              onClick={() => setIsCompanyModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#1B365D]/5 hover:bg-[#1B365D]/10 border border-[#1B365D]/15 rounded-md text-xs font-black text-[#1B365D] uppercase tracking-wide cursor-pointer transition-all active:scale-95"
+              title="Clique para alternar de empresa/empregador"
+            >
+              <Building size={14} className="text-[#1B365D]" />
+              <span className="truncate max-w-[140px] sm:max-w-[200px]">
+                {activeEmpresa.razaoSocial || activeEmpresa.nomeFantasia || "Sem Nome"}
+              </span>
+              <span className="text-[9px] text-secondary font-mono font-bold hidden md:inline border-l border-[#1B365D]/20 pl-2">
+                CNPJ Raiz: {activeEmpresa.cnpjRaiz}
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsCompanyModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md text-xs font-black text-rose-700 uppercase tracking-wide cursor-pointer transition-all active:scale-95 animate-pulse"
+            >
+              <Building size={14} />
+              Selecionar Empresa
+            </button>
+          )}
 
           {/* Impersonation Indicator Panel */}
           {user?.impersonator && (
@@ -232,6 +268,103 @@ export function TopBar() {
           </div>
         </div>
       </div>
+
+      {/* Modal de Seleção de Empresa */}
+      {isCompanyModalOpen && (
+        <div className="fixed inset-0 bg-black/55 z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-lg border border-outline-variant shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="flex justify-between items-center bg-[#1B365D] text-white p-5">
+              <div className="flex items-center gap-2">
+                <Building size={18} />
+                <h3 className="text-sm font-black uppercase tracking-wider">Selecionar Empresa Ativa</h3>
+              </div>
+              <button 
+                onClick={() => setIsCompanyModalOpen(false)}
+                className="text-white/80 hover:text-white transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="p-4 border-b border-outline-variant bg-neutral-50">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-2.5 text-secondary" />
+                <input
+                  type="text"
+                  placeholder="Buscar por Razão Social, Nome Fantasia ou CNPJ..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-white text-xs font-semibold rounded border border-outline-variant outline-none focus:border-[#1B365D]"
+                />
+              </div>
+            </div>
+
+            {/* Company List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 max-h-[400px]">
+              {filteredCompanies.length === 0 ? (
+                <div className="text-center py-8 text-xs text-secondary font-medium">
+                  Nenhuma empresa encontrada com a busca.
+                </div>
+              ) : (
+                filteredCompanies.map((emp) => {
+                  const isCurrent = activeEmpresa?.id === emp.id;
+                  return (
+                    <button
+                      key={emp.id}
+                      onClick={() => {
+                        setEmpresa(emp);
+                        setIsCompanyModalOpen(false);
+                      }}
+                      className={`w-full text-left p-3 rounded border transition-all flex justify-between items-center cursor-pointer ${
+                        isCurrent 
+                          ? "bg-[#1B365D]/5 border-[#1B365D] ring-1 ring-[#1B365D]" 
+                          : "border-outline-variant hover:bg-neutral-50"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-bold text-neutral-900 line-clamp-1">
+                          {emp.razaoSocial || "Razão Social Não Informada"}
+                        </span>
+                        {emp.nomeFantasia && (
+                          <span className="text-[10px] text-secondary font-medium line-clamp-1">
+                            {emp.nomeFantasia}
+                          </span>
+                        )}
+                        <span className="text-[9px] font-mono font-semibold text-secondary mt-1">
+                          CNPJ Raiz: {emp.cnpjRaiz} {emp.cnpjCompleto ? `• Completo: ${emp.cnpjCompleto}` : ""}
+                        </span>
+                      </div>
+                      {isCurrent && (
+                        <span className="text-[9px] font-black uppercase text-[#1B365D] bg-[#1B365D]/10 px-2 py-0.5 rounded-sm">
+                          Ativa
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer / Register Option */}
+            {(user?.perfil === "superAdmin" || user?.perfil === "Admin" || user?.perfil?.toUpperCase() === "SUPER_ADMIN" || user?.perfil?.toUpperCase() === "ADMIN") && (
+              <div className="p-4 bg-neutral-50 border-t border-outline-variant flex justify-end">
+                <button
+                  onClick={() => {
+                    setIsCompanyModalOpen(false);
+                    openRegisterEmpresaModal();
+                  }}
+                  className="flex items-center gap-1.5 text-[10px] font-bold bg-[#1B365D] text-white hover:bg-[#152a49] py-2 px-4 rounded transition-all active:scale-95 shadow-md shadow-indigo-950/10"
+                >
+                  <Plus size={12} />
+                  Cadastrar Nova Empresa
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 }
