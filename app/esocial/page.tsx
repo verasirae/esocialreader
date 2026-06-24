@@ -191,7 +191,8 @@ function EsocialTablesContent() {
       if (resp && resp.data) {
         setEmpresasSelect(resp.data);
         if (resp.data.length > 0 && !selectedEmpresaId) {
-          setSelectedEmpresaId(resp.data[0].id);
+          const activeEmpId = typeof window !== "undefined" ? localStorage.getItem("active_empresa_id") : null;
+          setSelectedEmpresaId(activeEmpId || resp.data[0].id);
         }
       }
     } catch (e) {
@@ -282,12 +283,12 @@ function EsocialTablesContent() {
 
       setSincResultado(data);
       setSincMessage("Sincronização concluída com sucesso!");
-      fetchHistoricoSincs(selectedEmpresaId);
     } catch (e: any) {
       setSincMessage("");
       alert("Erro durante sincronização: " + e.message);
     } finally {
       setIsSincronizandoActive(false);
+      fetchHistoricoSincs(selectedEmpresaId);
     }
   };
 
@@ -1138,12 +1139,14 @@ function EsocialTablesContent() {
                   <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-xs mt-1 border-t border-dashed border-outline-variant/60 pt-3">
                     <div className="flex flex-col font-mono block min-w-0">
                       <span className="text-[10px] text-secondary lowercase">nome do arquivo / alias</span>
-                      <span className="font-bold text-on-surface truncate block" title={certificadoAtivo.nome}>{certificadoAtivo.nome}</span>
+                      <span className="font-bold text-on-surface truncate block" title={certificadoAtivo.nome || "-"}>{certificadoAtivo.nome || "-"}</span>
                     </div>
                     <div className="flex flex-col font-mono block min-w-0">
                       <span className="text-[10px] text-secondary lowercase">vencimento</span>
-                      <span className={`font-bold block ${new Date(certificadoAtivo.validade).getTime() < Date.now() ? "text-red-600" : "text-on-surface"}`}>
-                        {new Date(certificadoAtivo.validade).toLocaleDateString("pt-BR")}
+                      <span className={`font-bold block ${certificadoAtivo.validade && !isNaN(new Date(certificadoAtivo.validade).getTime()) && new Date(certificadoAtivo.validade).getTime() < Date.now() ? "text-red-600" : "text-on-surface"}`}>
+                        {certificadoAtivo.validade && !isNaN(new Date(certificadoAtivo.validade).getTime())
+                          ? new Date(certificadoAtivo.validade).toLocaleDateString("pt-BR")
+                          : "-"}
                       </span>
                     </div>
                     <div className="flex flex-col font-mono col-span-2 block min-w-0">
@@ -1239,7 +1242,7 @@ function EsocialTablesContent() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-xs text-on-surface">
+                <table className="tabela-sincronizacao-webservice w-full border-collapse text-left text-xs text-on-surface">
                   <thead>
                     <tr className="bg-surface border-b border-outline-variant text-[10px] font-bold text-secondary uppercase font-mono">
                       <th className="px-4 py-3">Período</th>
@@ -1253,26 +1256,39 @@ function EsocialTablesContent() {
                   </thead>
                   <tbody className="divide-y divide-outline-variant/60 font-mono">
                     {logsSincronizacoes.map((item) => (
-                      <tr key={item.id} className="hover:bg-surface/50 transition-colors">
-                        <td className="px-4 py-3 font-bold text-primary">{item.perApur}</td>
-                        <td className="px-4 py-3 text-secondary">{new Date(item.iniciadoEm).toLocaleString("pt-BR")}</td>
-                        <td className="px-4 py-3 text-secondary">
-                          {item.concluidoEm ? new Date(item.concluidoEm).toLocaleString("pt-BR") : "-"}
-                        </td>
-                        <td className="px-4 py-3 font-bold">{item.totalIdentificadores}</td>
-                        <td className="px-4 py-3 text-emerald-600 font-bold">{item.totalBaixados}</td>
-                        <td className="px-4 py-3 text-red-500 font-bold">{item.totalErros}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={cn(
-                            "inline-block rounded-xs px-2.5 py-1 text-[9px] font-black uppercase tracking-wider",
-                            item.status === "concluido" && "bg-emerald-100 text-emerald-800",
-                            item.status === "executando" && "bg-amber-100 text-amber-800 animate-pulse",
-                            item.status === "erro" && "bg-red-100 text-red-800"
-                          )}>
-                            {item.status}
-                          </span>
-                        </td>
-                      </tr>
+                      <React.Fragment key={item.id}>
+                        <tr className="hover:bg-surface/50 transition-colors">
+                          <td className="px-4 py-3 font-bold text-primary">{item.perApur}</td>
+                          <td className="px-4 py-3 text-secondary">{new Date(item.iniciadoEm).toLocaleString("pt-BR")}</td>
+                          <td className="px-4 py-3 text-secondary">
+                            {item.concluidoEm ? new Date(item.concluidoEm).toLocaleString("pt-BR") : "-"}
+                          </td>
+                          <td className="px-4 py-3 font-bold">{item.totalIdentificadores}</td>
+                          <td className="px-4 py-3 text-emerald-600 font-bold">{item.totalBaixados}</td>
+                          <td className="px-4 py-3 text-red-500 font-bold">{item.totalErros}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={cn(
+                              "inline-block rounded-xs px-2.5 py-1 text-[9px] font-black uppercase tracking-wider",
+                              item.status === "concluido" && "bg-emerald-100 text-emerald-800",
+                              item.status === "executando" && "bg-amber-100 text-amber-800 animate-pulse",
+                              item.status === "erro" && "bg-red-100 text-red-800"
+                            )}>
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                        {item.status === "erro" && (
+                          <tr className="bg-red-50/30">
+                            <td colSpan={7} className="px-4 py-2 border-b border-outline-variant/60 text-[11px] text-red-600 font-sans">
+                              <div className="flex items-center gap-2">
+                                <AlertCircle size={14} className="shrink-0 text-red-500" />
+                                <span className="font-bold">Motivo do Erro:</span>
+                                <span className="font-mono">{item.mensagemErro || "Falha na validação do certificado A1 ou mTLS de conexão."}</span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

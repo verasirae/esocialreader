@@ -93,12 +93,12 @@ export default function EsocialAutomacaoPage() {
 
       setSincResultado(data);
       setSincMessage("Sincronização concluída com sucesso!");
-      fetchHistoricoSincs(activeEmpresaId);
     } catch (e: any) {
       setSincMessage("");
       alert("Erro durante sincronização: " + e.message);
     } finally {
       setIsSincronizandoActive(false);
+      fetchHistoricoSincs(activeEmpresaId);
     }
   };
 
@@ -223,7 +223,7 @@ export default function EsocialAutomacaoPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-left text-xs text-on-surface">
+                  <table className="tabela-sincronizacao-webservice w-full border-collapse text-left text-xs text-on-surface">
                     <thead>
                       <tr className="bg-[#FAF9FC] border-b border-outline-variant text-[10px] font-bold text-secondary uppercase font-mono">
                         <th className="px-4 py-3">Período</th>
@@ -237,26 +237,39 @@ export default function EsocialAutomacaoPage() {
                     </thead>
                     <tbody className="divide-y divide-outline-variant/60 font-mono">
                       {logsSincronizacoes.map((item) => (
-                        <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
-                          <td className="px-4 py-3 font-bold text-primary">{item.perApur}</td>
-                          <td className="px-4 py-3 text-secondary">{new Date(item.iniciadoEm).toLocaleString("pt-BR")}</td>
-                          <td className="px-4 py-3 text-secondary">
-                            {item.concluidoEm ? new Date(item.concluidoEm).toLocaleString("pt-BR") : "-"}
-                          </td>
-                          <td className="px-4 py-3 font-bold">{item.totalIdentificadores}</td>
-                          <td className="px-4 py-3 text-emerald-600 font-bold">{item.totalBaixados}</td>
-                          <td className="px-4 py-3 text-red-500 font-bold">{item.totalErros}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={cn(
-                              "inline-block rounded-xs px-2.5 py-1 text-[9px] font-black uppercase tracking-wider",
-                              item.status === "concluido" && "bg-emerald-100 text-emerald-800",
-                              item.status === "executando" && "bg-amber-100 text-amber-800 animate-pulse",
-                              item.status === "erro" && "bg-red-100 text-red-800"
-                            )}>
-                              {item.status}
-                            </span>
-                          </td>
-                        </tr>
+                        <React.Fragment key={item.id}>
+                          <tr className="hover:bg-neutral-50/50 transition-colors">
+                            <td className="px-4 py-3 font-bold text-primary">{item.perApur}</td>
+                            <td className="px-4 py-3 text-secondary">{new Date(item.iniciadoEm).toLocaleString("pt-BR")}</td>
+                            <td className="px-4 py-3 text-secondary">
+                              {item.concluidoEm ? new Date(item.concluidoEm).toLocaleString("pt-BR") : "-"}
+                            </td>
+                            <td className="px-4 py-3 font-bold">{item.totalIdentificadores}</td>
+                            <td className="px-4 py-3 text-emerald-600 font-bold">{item.totalBaixados}</td>
+                            <td className="px-4 py-3 text-red-500 font-bold">{item.totalErros}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={cn(
+                                "inline-block rounded-xs px-2.5 py-1 text-[9px] font-black uppercase tracking-wider",
+                                item.status === "concluido" && "bg-emerald-100 text-emerald-800",
+                                item.status === "executando" && "bg-amber-100 text-amber-800 animate-pulse",
+                                item.status === "erro" && "bg-red-100 text-red-800"
+                              )}>
+                                {item.status}
+                              </span>
+                            </td>
+                          </tr>
+                          {item.status === "erro" && (
+                            <tr className="bg-red-50/30">
+                              <td colSpan={7} className="px-4 py-2 border-b border-outline-variant/60 text-[11px] text-red-600 font-sans">
+                                <div className="flex items-center gap-2">
+                                  <AlertCircle size={14} className="shrink-0 text-red-500" />
+                                  <span className="font-bold">Motivo do Erro:</span>
+                                  <span className="font-mono">{item.mensagemErro || "Falha na validação do certificado A1 ou mTLS de conexão."}</span>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -293,12 +306,14 @@ export default function EsocialAutomacaoPage() {
                   <div className="space-y-2 text-xs border-t border-dashed border-outline-variant/60 pt-3 mt-1 font-sans">
                     <div className="flex flex-col min-w-0">
                       <span className="text-[9px] text-secondary font-mono font-bold uppercase tracking-wider">Identificador</span>
-                      <span className="font-bold text-on-surface truncate" title={certificadoAtivo.nome}>{certificadoAtivo.nome}</span>
+                      <span className="font-bold text-on-surface truncate" title={certificadoAtivo.nome || "-"}>{certificadoAtivo.nome || "-"}</span>
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className="text-[9px] text-secondary font-mono font-bold uppercase tracking-wider">Vencimento</span>
-                      <span className={`font-bold ${new Date(certificadoAtivo.validade).getTime() < Date.now() ? "text-red-600" : "text-on-surface"}`}>
-                        {new Date(certificadoAtivo.validade).toLocaleDateString("pt-BR")}
+                      <span className={`font-bold ${certificadoAtivo.validade && !isNaN(new Date(certificadoAtivo.validade).getTime()) && new Date(certificadoAtivo.validade).getTime() < Date.now() ? "text-red-600" : "text-on-surface"}`}>
+                        {certificadoAtivo.validade && !isNaN(new Date(certificadoAtivo.validade).getTime())
+                          ? new Date(certificadoAtivo.validade).toLocaleDateString("pt-BR")
+                          : "-"}
                       </span>
                     </div>
                   </div>

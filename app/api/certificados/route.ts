@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const formData = await req.formData();
-    const file     = formData.get("arquivo") as File;
+    const file     = (formData.get("arquivo") || formData.get("file")) as File;
     const senha    = formData.get("senha")   as string;
     const empresaId = formData.get("empresaId") as string;
     const ambiente  = (formData.get("ambiente") as string) || "producao";

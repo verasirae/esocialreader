@@ -128,7 +128,7 @@ export default function SettingsPage() {
     try {
       const formData = new FormData();
       formData.append("empresaId", activeEmpresaId);
-      formData.append("file", certFile);
+      formData.append("arquivo", certFile);
       formData.append("senha", certSenha);
       formData.append("ambiente", certAmbiente);
       formData.append("nome", certNome);
@@ -952,12 +952,14 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs mt-1 border-t border-dashed border-outline-variant/50 pt-4">
                     <div className="flex flex-col font-mono block min-w-0">
                       <span className="text-[10px] text-secondary lowercase">nome do arquivo / alias</span>
-                      <span className="font-bold text-on-surface truncate block" title={certificadoAtivo.nome}>{certificadoAtivo.nome}</span>
+                      <span className="font-bold text-on-surface truncate block" title={certificadoAtivo.nome || "-"}>{certificadoAtivo.nome || "-"}</span>
                     </div>
                     <div className="flex flex-col font-mono block min-w-0">
                       <span className="text-[10px] text-secondary lowercase">vencimento</span>
-                      <span className={`font-bold block ${new Date(certificadoAtivo.validade).getTime() < Date.now() ? "text-red-600" : "text-on-surface"}`}>
-                        {new Date(certificadoAtivo.validade).toLocaleDateString("pt-BR")}
+                      <span className={`font-bold block ${certificadoAtivo.validade && !isNaN(new Date(certificadoAtivo.validade).getTime()) && new Date(certificadoAtivo.validade).getTime() < Date.now() ? "text-red-600" : "text-on-surface"}`}>
+                        {certificadoAtivo.validade && !isNaN(new Date(certificadoAtivo.validade).getTime())
+                          ? new Date(certificadoAtivo.validade).toLocaleDateString("pt-BR")
+                          : "-"}
                       </span>
                     </div>
                     <div className="flex flex-col font-mono sm:col-span-2 block min-w-0">
