@@ -3,37 +3,67 @@
 import React, { useState, useEffect } from "react";
 import { UserPlus, ChevronDown, Check, FileUp, Download, Edit3 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
+import { useEmpresa } from "@/lib/contexts/EmpresaContext";
 import * as XLSX from "xlsx";
 import LoadingSpinner from "./LoadingSpinner";
 
 export function RegisterTrabalhadorModal() {
   const { isRegisterTrabalhadorModalOpen, closeRegisterTrabalhadorModal, editingTrabalhador } = useModals();
+  const { activeEmpresa } = useEmpresa();
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [trabalhadorForm, setTrabalhadorForm] = useState({ 
     cpf: "",
     nome: "",
-    empresaId: ""
+    cnpjEmpregador: "",
+    nis: "",
+    matricula: "",
+    categoriaEsocial: "",
+    dtAdmissao: "",
+    dtDesligamento: "",
+    ativo: "true"
   });
-
-  useEffect(() => {
-    if (editingTrabalhador) {
-      setTrabalhadorForm({
-        cpf: editingTrabalhador.cpf || "",
-        nome: editingTrabalhador.nome || "",
-        empresaId: editingTrabalhador.empresaId || ""
-      });
-    } else {
-      setTrabalhadorForm({ cpf: "", nome: "", empresaId: "" });
-    }
-  }, [editingTrabalhador, isRegisterTrabalhadorModalOpen]);
 
   useEffect(() => {
     if (isRegisterTrabalhadorModalOpen) {
       fetchEmpresas();
     }
   }, [isRegisterTrabalhadorModalOpen]);
+
+  useEffect(() => {
+    if (editingTrabalhador) {
+      // Find CNPJ of the worker's company
+      const matchedEmp = empresas.find(e => e.id === editingTrabalhador.empresaId);
+      const cnpj = matchedEmp ? (matchedEmp.cnpjCompleto || matchedEmp.cnpjRaiz) : "";
+
+      setTrabalhadorForm({
+        cpf: editingTrabalhador.cpf || "",
+        nome: editingTrabalhador.nome || "",
+        cnpjEmpregador: cnpj || "",
+        nis: editingTrabalhador.nis || "",
+        matricula: editingTrabalhador.matricula || "",
+        categoriaEsocial: editingTrabalhador.categoriaEsocial || "",
+        dtAdmissao: editingTrabalhador.dtAdmissao ? new Date(editingTrabalhador.dtAdmissao).toISOString().split("T")[0] : "",
+        dtDesligamento: editingTrabalhador.dtDesligamento ? new Date(editingTrabalhador.dtDesligamento).toISOString().split("T")[0] : "",
+        ativo: editingTrabalhador.ativo !== undefined ? String(editingTrabalhador.ativo) : "true"
+      });
+    } else {
+      // New worker: prefill CNPJ Empregador with active company's CNPJ
+      const activeCnpj = activeEmpresa ? (activeEmpresa.cnpjCompleto || activeEmpresa.cnpjRaiz) : "";
+      setTrabalhadorForm({ 
+        cpf: "", 
+        nome: "", 
+        cnpjEmpregador: activeCnpj || "",
+        nis: "",
+        matricula: "",
+        categoriaEsocial: "",
+        dtAdmissao: "",
+        dtDesligamento: "",
+        ativo: "true"
+      });
+    }
+  }, [editingTrabalhador, isRegisterTrabalhadorModalOpen, empresas, activeEmpresa]);
 
   const fetchEmpresas = async () => {
     try {
@@ -61,6 +91,7 @@ export function RegisterTrabalhadorModal() {
     setIsImporting(true);
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("activeEmpresaId", activeEmpresa?.id || "");
 
     try {
       const res = await fetch("/api/esocial/trabalhadores/import-excel", {
@@ -92,9 +123,30 @@ export function RegisterTrabalhadorModal() {
   };
 
   const downloadTemplate = () => {
+    const activeCnpj = activeEmpresa ? (activeEmpresa.cnpjCompleto || activeEmpresa.cnpjRaiz) : "12345678000100";
     const template = [
-      { CPF: "12345678901", Nome: "Jose da Silva", CNPJ_Empregador: "12345678000100" },
-      { CPF: "98765432100", Nome: "Maria Oliveira", CNPJ_Empregador: "12345678000100" },
+      { 
+        CPF: "12345678901", 
+        Nome: "Jose da Silva", 
+        CNPJ_Empregador: activeCnpj,
+        NIS: "12345678901",
+        Matricula: "MAT001",
+        Categoria_eSocial: "101",
+        Data_Admissao: "2024-01-15",
+        Data_Desligamento: "",
+        Ativo: "Sim"
+      },
+      { 
+        CPF: "98765432100", 
+        Nome: "Maria Oliveira", 
+        CNPJ_Empregador: activeCnpj,
+        NIS: "",
+        Matricula: "MAT002",
+        Categoria_eSocial: "101",
+        Data_Admissao: "2023-06-20",
+        Data_Desligamento: "",
+        Ativo: "Sim"
+      },
     ];
     
     const ws = XLSX.utils.json_to_sheet(template);
@@ -125,7 +177,17 @@ export function RegisterTrabalhadorModal() {
       if (res.ok) {
         alert(editingTrabalhador ? "Trabalhador atualizado com sucesso!" : "Trabalhador cadastrado com sucesso!");
         closeRegisterTrabalhadorModal();
-        setTrabalhadorForm({ cpf: "", nome: "", empresaId: "" });
+        setTrabalhadorForm({ 
+          cpf: "", 
+          nome: "", 
+          cnpjEmpregador: "",
+          nis: "",
+          matricula: "",
+          categoriaEsocial: "",
+          dtAdmissao: "",
+          dtDesligamento: "",
+          ativo: "true"
+        });
         // Evento para atualizar listas se necessário
         window.dispatchEvent(new CustomEvent("trabalhador-added"));
       } else {
@@ -140,7 +202,7 @@ export function RegisterTrabalhadorModal() {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-[500px] flex flex-col rounded-sm shadow-2xl border border-outline-variant overflow-hidden min-h-[400px]">
+      <div className="bg-white w-full max-w-[650px] flex flex-col rounded-sm shadow-2xl border border-outline-variant overflow-hidden max-h-[90vh]">
         <div className="p-6 border-b border-outline-variant flex justify-between items-center bg-surface-container/10">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-primary rounded-sm flex items-center justify-center text-white">
@@ -151,7 +213,7 @@ export function RegisterTrabalhadorModal() {
                 {editingTrabalhador ? "Editar Trabalhador" : "Cadastrar Trabalhador"}
               </h3>
               <p className="text-[10px] font-black text-secondary uppercase tracking-widest">
-                {editingTrabalhador ? "Alteração de dados do empregado" : "Inclusão manual de empregado"}
+                {editingTrabalhador ? "Alteração de dados do empregado" : "Inclusão de empregado"}
               </p>
             </div>
           </div>
@@ -163,7 +225,7 @@ export function RegisterTrabalhadorModal() {
           </button>
         </div>
         
-        <form onSubmit={handleTrabalhadorSubmit} className="p-8 space-y-6">
+        <form onSubmit={handleTrabalhadorSubmit} className="flex-1 overflow-y-auto p-8 space-y-6">
           {!editingTrabalhador && (
             <div className="p-4 bg-primary/5 border border-primary/20 rounded-sm space-y-3">
               <div className="flex justify-between items-center">
@@ -208,54 +270,122 @@ export function RegisterTrabalhadorModal() {
           )}
 
           <div className="space-y-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Empresa / Empregador</label>
-              <div className="relative">
-                <select 
+            <h4 className="text-xs font-extrabold text-on-surface border-b border-outline-variant pb-2 uppercase tracking-wide">Dados Obrigatórios</h4>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5 col-span-1 sm:col-span-2">
+                <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Nome Completo *</label>
+                <input 
+                  type="text" 
                   required
-                  className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all appearance-none"
-                  value={trabalhadorForm.empresaId}
-                  onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, empresaId: e.target.value })}
-                >
-                  <option value="">Selecione uma empresa</option>
-                  {empresas.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.cnpjRaiz} - {emp.razaoSocial || emp.nomeFantasia || "Sem Nome"}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={16} className="absolute right-4 top-3.5 text-secondary pointer-events-none" />
+                  placeholder="Ex: João da Silva"
+                  className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
+                  value={trabalhadorForm.nome}
+                  onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, nome: e.target.value })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-secondary uppercase tracking-widest">CPF (Apenas números) *</label>
+                <input 
+                  type="text" 
+                  required
+                  disabled={!!editingTrabalhador}
+                  placeholder="Ex: 12345678901"
+                  className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all disabled:opacity-50"
+                  value={trabalhadorForm.cpf}
+                  onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, cpf: e.target.value.replace(/\D/g, "").substring(0, 11) })}
+                />
+                {editingTrabalhador && <p className="text-[9px] text-secondary font-medium">O CPF não pode ser alterado.</p>}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-secondary uppercase tracking-widest">CNPJ Empregador (Apenas números) *</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="Ex: 12345678000199"
+                  className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
+                  value={trabalhadorForm.cnpjEmpregador}
+                  onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, cnpjEmpregador: e.target.value.replace(/\D/g, "").substring(0, 14) })}
+                />
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black text-secondary uppercase tracking-widest">CPF (Apenas números)</label>
-              <input 
-                type="text" 
-                required
-                disabled={!!editingTrabalhador}
-                placeholder="Ex: 12345678901"
-                className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all disabled:opacity-50"
-                value={trabalhadorForm.cpf}
-                onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, cpf: e.target.value.replace(/\D/g, "").substring(0, 11) })}
-              />
-              {editingTrabalhador && <p className="text-[9px] text-secondary font-medium">O CPF não pode ser alterado.</p>}
-            </div>
+            <h4 className="text-xs font-extrabold text-on-surface border-b border-outline-variant pt-4 pb-2 uppercase tracking-wide">Dados Opcionais</h4>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Nome Completo</label>
-              <input 
-                type="text" 
-                required
-                placeholder="Ex: João da Silva"
-                className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
-                value={trabalhadorForm.nome}
-                onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, nome: e.target.value })}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-secondary uppercase tracking-widest">NIS (PIS/PASEP/NIT)</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: 12345678901"
+                  className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
+                  value={trabalhadorForm.nis}
+                  onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, nis: e.target.value.replace(/\D/g, "").substring(0, 11) })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Matrícula</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: MAT0001"
+                  className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
+                  value={trabalhadorForm.matricula}
+                  onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, matricula: e.target.value })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Categoria eSocial</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: 101"
+                  className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
+                  value={trabalhadorForm.categoriaEsocial}
+                  onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, categoriaEsocial: e.target.value })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Ativo</label>
+                <div className="relative">
+                  <select 
+                    className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all appearance-none"
+                    value={trabalhadorForm.ativo}
+                    onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, ativo: e.target.value })}
+                  >
+                    <option value="true">Sim</option>
+                    <option value="false">Não</option>
+                  </select>
+                  <ChevronDown size={16} className="absolute right-4 top-3.5 text-secondary pointer-events-none" />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Data de Admissão</label>
+                <input 
+                  type="date" 
+                  className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
+                  value={trabalhadorForm.dtAdmissao}
+                  onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, dtAdmissao: e.target.value })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Data de Desligamento</label>
+                <input 
+                  type="date" 
+                  className="w-full px-4 py-3 bg-surface border border-outline-variant rounded-sm text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all"
+                  value={trabalhadorForm.dtDesligamento}
+                  onChange={(e) => setTrabalhadorForm({ ...trabalhadorForm, dtDesligamento: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="pt-4 flex gap-4">
+          <div className="pt-4 flex gap-4 border-t border-outline-variant">
             <button 
               type="button"
               className="flex-1 px-4 py-3 border border-outline-variant rounded-sm text-sm font-bold text-secondary hover:bg-surface transition-all"
@@ -268,7 +398,7 @@ export function RegisterTrabalhadorModal() {
               className="flex-1 bg-primary text-white py-3 rounded-sm text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
               disabled={isLoading}
             >
-              {isLoading ? <LoadingSpinner size="xs" /> : (editingTrabalhador ? <Check size={16} /> : <Check size={16} />)}
+              {isLoading ? <LoadingSpinner size="xs" /> : <Check size={16} />}
               <span>{editingTrabalhador ? "Salvar Alterações" : "Salvar Trabalhador"}</span>
             </button>
           </div>

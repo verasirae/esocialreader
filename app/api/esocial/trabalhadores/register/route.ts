@@ -8,7 +8,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const cpfRaw = String(body.cpf || "").replace(/\D/g, "");
     const cpf = cpfRaw.padStart(11, "0");
-    const { nome, empresaId } = body;
+    const { 
+      nome, 
+      cnpjEmpregador,
+      nis,
+      matricula,
+      categoriaEsocial,
+      dtAdmissao,
+      dtDesligamento,
+      ativo 
+    } = body;
 
     if (!cpf || cpf.length !== 11) {
       return safeJson({ error: "CPF inválido (deve conter 11 dígitos)" }, 400);
@@ -18,9 +27,41 @@ export async function POST(req: NextRequest) {
       return safeJson({ error: "Nome é obrigatório" }, 400);
     }
 
-    if (!empresaId) {
-      return safeJson({ error: "Empresa é obrigatória" }, 400);
+    if (!cnpjEmpregador) {
+      return safeJson({ error: "CNPJ Empregador é obrigatório" }, 400);
     }
+
+    const cleanCnpj = String(cnpjEmpregador).replace(/\D/g, "");
+    if (cleanCnpj.length < 8) {
+      return safeJson({ error: "CNPJ Empregador inválido" }, 400);
+    }
+
+    const cnpjRaiz = cleanCnpj.substring(0, 8);
+    let empresa = await prisma.empresa.findFirst({
+      where: {
+        OR: [
+          { cnpjRaiz: cnpjRaiz },
+          { cnpjCompleto: cleanCnpj }
+        ]
+      }
+    });
+
+    if (!empresa) {
+      empresa = await prisma.empresa.create({
+        data: {
+          cnpjRaiz,
+          cnpjCompleto: cleanCnpj.length >= 14 ? cleanCnpj : null,
+          razaoSocial: "Empresa " + cleanCnpj,
+          ambienteEsocial: "producao"
+        }
+      });
+    }
+
+    const empresaId = empresa.id;
+
+    const parsedDtAdmissao = dtAdmissao ? new Date(dtAdmissao) : null;
+    const parsedDtDesligamento = dtDesligamento ? new Date(dtDesligamento) : null;
+    const isAtivo = ativo !== undefined ? String(ativo) === "true" : true;
 
     const trabalhador = await prisma.trabalhador.upsert({
       where: { 
@@ -31,12 +72,23 @@ export async function POST(req: NextRequest) {
       },
       update: { 
         nome,
-        empresaId
+        nis: nis || null,
+        matricula: matricula || null,
+        categoriaEsocial: categoriaEsocial || null,
+        dtAdmissao: parsedDtAdmissao,
+        dtDesligamento: parsedDtDesligamento,
+        ativo: isAtivo,
       },
       create: { 
         cpf,
         nome,
-        empresaId
+        empresaId,
+        nis: nis || null,
+        matricula: matricula || null,
+        categoriaEsocial: categoriaEsocial || null,
+        dtAdmissao: parsedDtAdmissao,
+        dtDesligamento: parsedDtDesligamento,
+        ativo: isAtivo,
       }
     });
 

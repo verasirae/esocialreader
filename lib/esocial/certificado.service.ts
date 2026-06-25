@@ -1,8 +1,8 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 import { prisma } from "@/lib/prisma";
-import * as forge from "node-forge";
 
 const CERT_SECRET = process.env.JWT_SECRET || "compliance_portal_secret_key_1234567890";
 const CERT_DIR    = process.env.CERT_STORAGE_PATH || "./storage/certificados";
@@ -41,36 +41,70 @@ export function descriptografarSenha(senhaCriptografada: string): string {
   }
 }
 
-// Extrai validade e fingerprint do PFX usando forge
-function extrairMetadados(pfxBuffer: Buffer, senha: string): {
-  validade:    Date;
-  fingerprint: string;
-} {
+// ─── Extração de metadados via OpenSSL nativo ─────────────────────────────────
+// Usa o módulo crypto nativo do Node.js (OpenSSL) em vez de node-forge.
+// Suporta PFX modernos com AES-256-CBC + SHA-256 (padrão ICP-Brasil A1).
+
+function extrairMetadados(
+  pfxBuffer: Buffer,
+  senha: string
+): { validade: Date; fingerprint: string } {
   try {
-    const p12Asn1 = forge.asn1.fromDer(pfxBuffer.toString("binary"));
-    const p12   = forge.pkcs12.pkcs12FromAsn1(p12Asn1, senha);
+    return extrairMetadadosNativo(pfxBuffer, senha);
+  } catch (err) {
+    console.warn("[CertificadoService] Não foi possível extrair metadados do PFX. Usando fallback.", err);
+    return {
+      validade:    new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      fingerprint: "",
+    };
+  }
+}
 
-    const bags = p12.getBags({ bagType: forge.pki.oids.certBag });
-    const certBag = bags[forge.pki.oids.certBag];
-    const cert = certBag && certBag[0] ? certBag[0].cert : null;
+function extrairMetadadosNativo(
+  pfxBuffer: Buffer,
+  senha: string
+): { validade: Date; fingerprint: string } {
+  // Usa arquivos temporários com OpenSSL CLI — disponível em qualquer ambiente Linux/Node
+  const tmpDir      = require("os").tmpdir();
+  const tmpPfx      = path.join(tmpDir, `cert_${Date.now()}.pfx`);
+  const tmpPem      = path.join(tmpDir, `cert_${Date.now()}.pem`);
 
-    if (!cert) throw new Error("Certificado não encontrado no PFX");
+  try {
+    fs.writeFileSync(tmpPfx, pfxBuffer);
 
-    const validade    = new Date(cert.validity.notAfter);
-    
-    // Calculates fingerprint
-    const certAsn1 = forge.pki.certificateToAsn1(cert);
-    const certDer = forge.asn1.toDer(certAsn1).getBytes();
-    const md = forge.md.sha1.create();
-    md.update(certDer);
-    const hex = md.digest().toHex().toUpperCase();
-    const fingerprint = (hex.match(/.{2}/g) || []).join(":");
+    // Extrai o certificado do PFX para PEM via OpenSSL
+    // Usando env:CERT_PWD para evitar qualquer problema de escape de caracteres na senha
+    execSync(
+      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpPem}" -legacy 2>/dev/null || ` +
+      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpPem}" 2>/dev/null`,
+      {
+        stdio: "pipe",
+        env: { ...process.env, CERT_PWD: senha }
+      }
+    );
+
+    // Extrai a data de validade
+    const validadeRaw = execSync(
+      `openssl x509 -in "${tmpPem}" -noout -enddate 2>/dev/null`,
+      { stdio: "pipe" }
+    ).toString().trim();
+    // Formato: "notAfter=Jun 22 00:00:00 2027 GMT"
+    const dateStr = validadeRaw.replace("notAfter=", "").trim();
+    const validade = new Date(dateStr);
+
+    // Extrai o fingerprint SHA-1
+    const fingerprintRaw = execSync(
+      `openssl x509 -in "${tmpPem}" -noout -fingerprint -sha1 2>/dev/null`,
+      { stdio: "pipe" }
+    ).toString().trim();
+    // Formato: "SHA1 Fingerprint=AA:BB:CC:..."
+    const fingerprint = fingerprintRaw.split("=")[1] || "";
 
     return { validade, fingerprint };
-  } catch (error) {
-    console.error("Erro ao extrair metadados do certificado A1:", error);
-    // Fallback de 1 ano
-    return { validade: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), fingerprint: "" };
+  } finally {
+    // Limpa arquivos temporários sempre
+    try { fs.unlinkSync(tmpPfx); } catch {}
+    try { fs.unlinkSync(tmpPem); } catch {}
   }
 }
 
@@ -102,15 +136,15 @@ export async function salvarCertificado(params: {
   // Persiste no banco
   const cert = await prisma.certificadoDigital.create({
     data: {
-      empresaId:         params.empresaId,
-      nome:              params.nome,
+      empresaId:          params.empresaId,
+      nome:               params.nome,
       validade,
       fingerprint,
-      nrInscCert:        params.nrInscCert || null,
+      nrInscCert:         params.nrInscCert || null,
       senhaCriptografada: criptografarSenha(params.senha),
       storagePath,
-      ambiente:          params.ambiente,
-      ativo:             true,
+      ambiente:           params.ambiente,
+      ativo:              true,
     },
   });
 
