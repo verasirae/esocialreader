@@ -10,7 +10,9 @@ import {
   History, 
   Key, 
   ArrowRight,
-  ExternalLink 
+  ExternalLink,
+  Search,
+  Users
 } from "lucide-react";
 import Link from "next/link";
 import { cn, safeJsonFetch } from "@/lib/utils";
@@ -29,6 +31,12 @@ export default function EsocialAutomacaoPage() {
   const [sincResultado, setSincResultado] = useState<any>(null);
   const [logsSincronizacoes, setLogsSincronizacoes] = useState<any[]>([]);
 
+  // Trabalhadores Selection States
+  const [trabalhadoresAtivos, setTrabalhadoresAtivos] = useState<any[]>([]);
+  const [isCarregandoTrabalhadores, setIsCarregandoTrabalhadores] = useState(false);
+  const [selectedTrabalhadorIds, setSelectedTrabalhadorIds] = useState<string[]>([]);
+  const [searchTrabalhador, setSearchTrabalhador] = useState("");
+
   // Load certificate and logs when activeEmpresaId changes
   useEffect(() => {
     if (activeEmpresaId) {
@@ -41,6 +49,37 @@ export default function EsocialAutomacaoPage() {
     setSincResultado(null);
     setSincMessage("");
   }, [activeEmpresaId]);
+
+  // Load active workers in period
+  useEffect(() => {
+    if (activeEmpresaId && sincAnoMes) {
+      fetchTrabalhadoresAtivos(activeEmpresaId, sincAnoMes);
+    } else {
+      setTrabalhadoresAtivos([]);
+      setSelectedTrabalhadorIds([]);
+    }
+  }, [activeEmpresaId, sincAnoMes]);
+
+  const fetchTrabalhadoresAtivos = async (empId: string, period: string) => {
+    setIsCarregandoTrabalhadores(true);
+    try {
+      const data = await safeJsonFetch(`/api/esocial/trabalhadores?take=all&perApur=${period}`);
+      if (data && Array.isArray(data.data)) {
+        setTrabalhadoresAtivos(data.data);
+        // Por padrão, já seleciona todos
+        setSelectedTrabalhadorIds(data.data.map((t: any) => t.id));
+      } else {
+        setTrabalhadoresAtivos([]);
+        setSelectedTrabalhadorIds([]);
+      }
+    } catch (e) {
+      console.error("Erro ao obter trabalhadores ativos:", e);
+      setTrabalhadoresAtivos([]);
+      setSelectedTrabalhadorIds([]);
+    } finally {
+      setIsCarregandoTrabalhadores(false);
+    }
+  };
 
   const fetchCertificadoAtivo = async (empId: string) => {
     setIsCarregandoCerts(true);
@@ -77,6 +116,10 @@ export default function EsocialAutomacaoPage() {
 
   const handleSubmeterSincronizacao = async () => {
     if (!activeEmpresaId) return;
+    if (selectedTrabalhadorIds.length === 0) {
+      alert("É obrigatório selecionar pelo menos um trabalhador para a sincronização.");
+      return;
+    }
     setIsSincronizandoActive(true);
     setSincMessage("Iniciando comunicação segura mTLS com os webservices do eSocial...");
     setSincResultado(null);
@@ -85,7 +128,11 @@ export default function EsocialAutomacaoPage() {
       const res = await fetch("/api/esocial/sincronizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empresaId: activeEmpresaId, perApur: sincAnoMes })
+        body: JSON.stringify({ 
+          empresaId: activeEmpresaId, 
+          perApur: sincAnoMes,
+          trabalhadorIds: selectedTrabalhadorIds
+        })
       });
 
       const data = await res.json();
@@ -101,6 +148,30 @@ export default function EsocialAutomacaoPage() {
       fetchHistoricoSincs(activeEmpresaId);
     }
   };
+
+  const handleToggleSelectAll = () => {
+    if (selectedTrabalhadorIds.length === trabalhadoresAtivos.length) {
+      setSelectedTrabalhadorIds([]);
+    } else {
+      setSelectedTrabalhadorIds(trabalhadoresAtivos.map(t => t.id));
+    }
+  };
+
+  const handleToggleTrabalhador = (id: string) => {
+    if (selectedTrabalhadorIds.includes(id)) {
+      setSelectedTrabalhadorIds(selectedTrabalhadorIds.filter(x => x !== id));
+    } else {
+      setSelectedTrabalhadorIds([...selectedTrabalhadorIds, id]);
+    }
+  };
+
+  const filteredTrabalhadores = trabalhadoresAtivos.filter(t => {
+    const term = searchTrabalhador.toLowerCase();
+    return (
+      (t.nome?.toLowerCase() || "").includes(term) ||
+      (t.cpf || "").includes(term)
+    );
+  });
 
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
@@ -152,8 +223,8 @@ export default function EsocialAutomacaoPage() {
                 Download Automático de Eventos
               </h3>
 
-              <div className="flex flex-col sm:flex-row items-end gap-4 bg-[#FAF9FC] p-4 border border-outline-variant/40 rounded-sm">
-                <div className="flex flex-col gap-1.5 flex-1 w-full">
+              <div className="flex flex-col gap-4 bg-[#FAF9FC] p-4 border border-outline-variant/40 rounded-sm">
+                <div className="flex flex-col gap-1.5 w-full">
                   <label className="text-[10px] font-bold text-secondary uppercase font-mono">Período de Apuração (Mês/Ano)</label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" size={14} />
@@ -166,11 +237,119 @@ export default function EsocialAutomacaoPage() {
                   </div>
                 </div>
 
+                {/* Worker Selection Section */}
+                <div className="flex flex-col gap-2.5 bg-white p-4 border border-outline-variant/60 rounded-sm">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-outline-variant/40 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Users size={16} className="text-primary" />
+                      <span className="text-[11px] font-black uppercase tracking-wider text-primary">
+                        Trabalhadores Ativos ({filteredTrabalhadores.length})
+                      </span>
+                    </div>
+
+                    {trabalhadoresAtivos.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAll}
+                        className="text-[10px] font-bold text-primary hover:underline"
+                      >
+                        {selectedTrabalhadorIds.length === trabalhadoresAtivos.length ? "Desmarcar Todos" : "Selecionar Todos"}
+                      </button>
+                    )}
+                  </div>
+
+                  {isCarregandoTrabalhadores ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-2">
+                      <Loader2 className="animate-spin text-primary" size={20} />
+                      <span className="text-[10px] font-mono font-bold text-secondary">Buscando trabalhadores ativos...</span>
+                    </div>
+                  ) : trabalhadoresAtivos.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center px-4 bg-neutral-50 border border-dashed border-outline-variant/60 rounded-sm">
+                      <AlertCircle className="text-amber-500 mb-1.5" size={20} />
+                      <span className="text-xs font-bold text-on-surface">Nenhum trabalhador ativo neste período</span>
+                      <p className="text-[10px] text-secondary max-w-xs mt-1 leading-normal">
+                        Não existem trabalhadores cadastrados com admissão válida ou sem desligamento para {sincAnoMes}.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {/* Search inside selection */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" size={13} />
+                        <input
+                          type="text"
+                          placeholder="Buscar por nome ou CPF..."
+                          value={searchTrabalhador}
+                          onChange={(e) => setSearchTrabalhador(e.target.value)}
+                          className="bg-white pl-9 pr-3 py-1.5 w-full text-[11px] font-medium outline-none focus:ring-1 focus:ring-primary rounded-sm border border-outline-variant shadow-xs"
+                        />
+                      </div>
+
+                      {/* Scrollable list */}
+                      <div className="max-h-[220px] overflow-y-auto border border-outline-variant/60 rounded-sm divide-y divide-outline-variant/30 pr-1">
+                        {filteredTrabalhadores.length === 0 ? (
+                          <div className="p-4 text-center text-[10px] text-secondary font-medium italic">
+                            Nenhum trabalhador correspondente à busca.
+                          </div>
+                        ) : (
+                          filteredTrabalhadores.map((t) => {
+                            const isSelected = selectedTrabalhadorIds.includes(t.id);
+                            return (
+                              <div 
+                                key={t.id} 
+                                onClick={() => handleToggleTrabalhador(t.id)}
+                                className={cn(
+                                  "flex items-center justify-between p-2.5 hover:bg-neutral-50 cursor-pointer transition-colors",
+                                  isSelected && "bg-primary/5 hover:bg-primary/10"
+                                )}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {}} // handled by parent click
+                                    className="rounded-xs text-primary border-outline focus:ring-primary h-3.5 w-3.5 pointer-events-none"
+                                  />
+                                  <div className="flex flex-col min-w-0 leading-normal">
+                                    <span className="text-xs font-bold text-on-surface truncate">{t.nome || "Trabalhador Sem Nome"}</span>
+                                    <div className="flex items-center gap-1.5 text-[9px] font-mono text-secondary font-semibold mt-0.5">
+                                      <span>CPF: {t.cpf}</span>
+                                      {t.dtDesligamento && (
+                                        <span className="bg-red-50 text-red-700 px-1 rounded-xs">
+                                          Desl: {new Date(t.dtDesligamento).toLocaleDateString("pt-BR")}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <span className="text-[9px] font-mono font-bold bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-sm shrink-0">
+                                  {t.categoriaEsocial || "Geral"}
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      {/* Selection status */}
+                      <div className="flex justify-between items-center text-[10px] font-mono font-bold text-secondary border-t border-dashed border-outline-variant/50 pt-2 px-1">
+                        <span>Selecionados: <strong className="text-primary">{selectedTrabalhadorIds.length}</strong> / {trabalhadoresAtivos.length}</span>
+                        {selectedTrabalhadorIds.length === 0 && (
+                          <span className="text-red-600 font-bold animate-pulse flex items-center gap-1">
+                            <AlertCircle size={12} />
+                            Seleção obrigatória
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={handleSubmeterSincronizacao}
-                  disabled={isSincronizandoActive || !certificadoAtivo}
-                  className="bg-primary hover:opacity-95 disabled:bg-neutral-200 disabled:text-neutral-500 text-white font-bold text-xs uppercase tracking-wider px-6 py-2.5 rounded-sm active:scale-[0.99] transition-all flex items-center justify-center gap-2 w-full sm:w-auto h-9.5 shadow-md shrink-0"
+                  disabled={isSincronizandoActive || !certificadoAtivo || selectedTrabalhadorIds.length === 0}
+                  className="bg-primary hover:opacity-95 disabled:bg-neutral-200 disabled:text-neutral-500 text-white font-bold text-xs uppercase tracking-wider px-6 py-2.5 rounded-sm active:scale-[0.99] transition-all flex items-center justify-center gap-2 w-full h-10 shadow-md shrink-0 mt-2"
                 >
                   {isSincronizandoActive ? <Loader2 className="animate-spin" size={15} /> : <Download size={15} />}
                   <span>{isSincronizandoActive ? "Sincronizando..." : "Sincronizar S-5002"}</span>

@@ -10,7 +10,9 @@ import {
   Loader2,
   FileText,
   ChevronDown,
-  Download
+  Download,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { useModals } from "@/lib/contexts/ModalContext";
 import { safeJsonFetch, hasDetailedAction } from "@/lib/utils";
@@ -198,7 +200,10 @@ export default function TrabalhadoresPage() {
                 placeholder="Buscar por Nome ou CPF..."
                 className="pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded-sm text-xs focus:ring-1 focus:ring-primary outline-none transition-all w-64"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
               />
             </div>
             {hasDetailedAction(user, "trabalhadores", "criar") ? (
@@ -271,6 +276,59 @@ export default function TrabalhadoresPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Paginação */}
+        <div className="px-lg py-5 border-t border-outline-variant bg-surface-container/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-[11px] text-secondary font-bold italic">
+            Mostrando {trabalhadoresData.length > 0 ? (currentPage - 1) * 10 + 1 : 0}-{Math.min(currentPage * 10, totalItems)} de {totalItems} registros
+          </p>
+          <div className="flex items-center gap-2">
+             <button 
+              className="w-10 h-10 rounded border border-outline-variant flex items-center justify-center hover:bg-white text-secondary transition-all disabled:opacity-30"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              title="Página Anterior"
+             >
+                <ChevronLeft size={20} />
+             </button>
+             <div className="flex items-center gap-1">
+               {(() => {
+                 const totalPages = Math.ceil(totalItems / 10);
+                 const pages = [];
+                 let startPage = Math.max(1, currentPage - 2);
+                 let endPage = Math.min(totalPages, startPage + 4);
+                 
+                 if (endPage - startPage < 4) {
+                   startPage = Math.max(1, endPage - 4);
+                 }
+                 
+                 for (let i = startPage; i <= endPage; i++) {
+                   pages.push(i);
+                 }
+                 
+                 return pages.map((pageNum) => (
+                   <button 
+                     key={pageNum}
+                     onClick={() => setCurrentPage(pageNum)}
+                     className={`w-10 h-10 rounded font-bold flex items-center justify-center transition-all ${
+                       currentPage === pageNum ? "bg-primary text-white shadow-md" : "border border-outline-variant hover:bg-white text-secondary"
+                     }`}
+                   >
+                     {pageNum}
+                   </button>
+                 ));
+               })()}
+             </div>
+             <button 
+              className="w-10 h-10 rounded border border-outline-variant flex items-center justify-center hover:bg-white text-secondary transition-all disabled:opacity-30"
+              disabled={currentPage >= Math.ceil(totalItems / 10)}
+              onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalItems / 10), prev + 1))}
+              title="Próxima Página"
+             >
+                <ChevronRight size={20} />
+             </button>
+          </div>
         </div>
       </div>
       {renderDataModal()}

@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
-  const { empresaId, perApur } = await req.json();
+  const { empresaId, perApur, trabalhadorIds } = await req.json();
   if (!empresaId || !perApur) {
     return NextResponse.json({ error: "empresaId e perApur são obrigatórios." }, { status: 400 });
   }
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
       cnpjRaiz:      empresa.cnpjRaiz,
       perApur,
       certificadoId: cert.id,
+      trabalhadorIds,
     });
 
     return NextResponse.json({ success: true, ...resultado });

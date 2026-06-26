@@ -13,17 +13,53 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const search = searchParams.get("search") || "";
     const takeParam = searchParams.get("take") || searchParams.get("limit") || "10";
-    const pageSize = parseInt(takeParam);
-    const skip = (page - 1) * pageSize;
+    const perApur = searchParams.get("perApur") || "";
+
+    const isAll = takeParam === "all";
+    const pageSize = isAll ? undefined : parseInt(takeParam);
+    const skip = isAll ? undefined : (page - 1) * (pageSize || 10);
+
+    let dateFilter: any[] = [];
+    if (perApur && perApur.includes("-")) {
+      const [yearStr, monthStr] = perApur.split("-");
+      const year = parseInt(yearStr, 10);
+      const month = parseInt(monthStr, 10);
+      
+      if (!isNaN(year) && !isNaN(month)) {
+        const firstDay = new Date(Date.UTC(year, month - 1, 1));
+        const lastDay = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+        
+        dateFilter = [
+          {
+            OR: [
+              { dtAdmissao: null },
+              { dtAdmissao: { lte: lastDay } }
+            ]
+          },
+          {
+            OR: [
+              { dtDesligamento: null },
+              { dtDesligamento: { gte: firstDay } }
+            ]
+          }
+        ];
+      }
+    }
+
+    const where: any = {
+      empresaId,
+      OR: [
+        { cpf: { contains: search } },
+        { nome: { contains: search, mode: "insensitive" } },
+      ]
+    };
+
+    if (dateFilter.length > 0) {
+      where.AND = dateFilter;
+    }
 
     const trabalhadores = await prisma.trabalhador.findMany({
-      where: {
-        empresaId,
-        OR: [
-          { cpf: { contains: search } },
-          { nome: { contains: search, mode: "insensitive" } },
-        ]
-      },
+      where,
       include: {
         _count: {
           select: { eventos: true }
@@ -35,20 +71,14 @@ export async function GET(req: NextRequest) {
     });
 
     const total = await prisma.trabalhador.count({
-      where: {
-        empresaId,
-        OR: [
-          { cpf: { contains: search } },
-          { nome: { contains: search, mode: "insensitive" } },
-        ]
-      }
+      where
     });
 
     return NextResponse.json({
       data: trabalhadores,
       total,
       page,
-      totalPages: Math.ceil(total / pageSize)
+      totalPages: isAll ? 1 : Math.ceil(total / (pageSize || 10))
     });
   } catch (error) {
     return NextResponse.json({ error: "Erro ao buscar trabalhadores" }, { status: 500 });

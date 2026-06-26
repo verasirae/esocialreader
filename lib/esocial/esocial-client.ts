@@ -25,7 +25,7 @@ async function chamadaSoap(
 <soap:Envelope
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-  xmlns:soap="http://www.w3.org/1003/05/soap-envelope">
+  xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Header/>
   <soap:Body>${body}</soap:Body>
 </soap:Envelope>`;
@@ -211,21 +211,30 @@ function parseDownloadResponse(xml: string): EventoDownloadado[] {
   let match;
 
   while ((match = regexArq.exec(xml)) !== null) {
-    const bloco      = match[1];
+    const bloco = match[1];
     const cdResposta = bloco.match(/<[a-zA-Z0-9:]*cdResposta>(.*?)<\/[a-zA-Z0-9:]*cdResposta>/)?.[1] || "";
-    const id         = bloco.match(/<[a-zA-Z0-9:]*Id>(.*?)<\/[a-zA-Z0-9:]*Id>/i)?.[1]                 || "";
-    const nrRec      = bloco.match(/<[a-zA-Z0-9:]*nrRec>(.*?)<\/[a-zA-Z0-9:]*nrRec>/)?.[1]           || "";
+    const id = bloco.match(/<[a-zA-Z0-9:]*Id>(.*?)<\/[a-zA-Z0-9:]*Id>/i)?.[1] || "";
+    const nrRec = bloco.match(/<[a-zA-Z0-9:]*nrRec>(.*?)<\/[a-zA-Z0-9:]*nrRec>/)?.[1] || "";
+
+    // O retorno do webservice encapsula o evento em dois níveis de <eSocial>:
+    //   <eSocial xmlns="retornoEventoCompleto"> → <retornoEventoCompleto> → <evento> → <eSocial xmlns="evtIrrfBenef">
+    // O parser S-5002 espera o <eSocial> interno (namespace evtIrrfBenef), não o wrapper externo.
+    let xmlEvento = "";
+    let xmlRecibo = "";
 
     const evtMatch = bloco.match(/<[a-zA-Z0-9:]*evt[^>]*>([\s\S]*?)<\/[a-zA-Z0-9:]*evt>/gi);
-    const recMatch = bloco.match(/<[a-zA-Z0-9:]*rec[^>]*>([\s\S]*?)<\/[a-zA-Z0-9:]*rec>/gi);
+    if (evtMatch && evtMatch[0]) {
+      // Dentro do bloco <evt>, localiza o <eSocial> interno do evento real
+      const innerEsocial = evtMatch[0].match(
+        /<eSocial[^>]+xmlns="http:\/\/www\.esocial\.gov\.br\/schema\/evt\/[^"]*"[\s\S]*?<\/eSocial>/i
+      );
+      xmlEvento = innerEsocial ? innerEsocial[0] : evtMatch[0];
+    }
 
-    eventos.push({
-      id,
-      nrRec,
-      xmlEvento: evtMatch ? evtMatch[0] : "",
-      xmlRecibo: recMatch ? recMatch[0] : "",
-      cdResposta,
-    });
+    const recMatch = bloco.match(/<[a-zA-Z0-9:]*rec[^>]*>([\s\S]*?)<\/[a-zA-Z0-9:]*rec>/gi);
+    xmlRecibo = recMatch ? recMatch[0] : "";
+
+    eventos.push({ id, nrRec, xmlEvento, xmlRecibo, cdResposta });
   }
 
   return eventos;
