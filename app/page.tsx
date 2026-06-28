@@ -88,6 +88,14 @@ interface DashboardStats {
   monthlySeries: Array<{ name: string; rendimentos: number; irrf: number }>;
   timeline: Array<{ id: string; tipo: string; referencia: string; descricao: string; timestamp: string; retificador: boolean }>;
   alerts: Array<{ id: string; text: string; type: string }>;
+  expiringCertificates?: Array<{
+    id: string;
+    nome: string;
+    validade: string;
+    empresaNome: string;
+    empresaId: string;
+    diasRestantes: number;
+  }>;
 }
 
 export default function Dashboard() {
@@ -491,6 +499,73 @@ export default function Dashboard() {
             <div className="bg-amber-600 h-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
           </div>
         </section>
+      )}
+
+      {/* Alerta de Expiração de Certificados Digitais */}
+      {stats?.expiringCertificates && stats.expiringCertificates.length > 0 && (
+        <div className="bg-rose-50/70 border border-rose-200/80 text-rose-900 p-5 rounded-sm shadow-xs flex flex-col gap-3">
+          <div className="flex items-center gap-2 pb-2 border-b border-rose-200/50">
+            <AlertTriangle className="text-rose-600 shrink-0" size={18} />
+            <span className="text-xs font-black uppercase tracking-wider text-rose-800 font-mono">
+              ALERTA DE SEGURANÇA: Certificados Digitais Próximos do Vencimento ou Expirados ({stats.expiringCertificates.length})
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-1">
+            {stats.expiringCertificates.map((cert) => {
+              const isExpired = cert.diasRestantes <= 0;
+              return (
+                <div 
+                  key={cert.id} 
+                  className={cn(
+                    "p-3.5 rounded-sm border text-[11px] flex flex-col gap-1.5 transition-all hover:shadow-xs",
+                    isExpired 
+                      ? "bg-rose-100/40 border-rose-300 text-rose-950" 
+                      : "bg-amber-50/60 border-amber-200 text-amber-950"
+                  )}
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="font-extrabold truncate text-neutral-900 flex items-center gap-1" title={cert.nome}>
+                      <Building size={12} className={isExpired ? "text-rose-600" : "text-amber-600"} />
+                      {cert.nome}
+                    </span>
+                    <span className={cn(
+                      "font-mono text-[9px] font-black px-2 py-0.5 rounded leading-none shrink-0 uppercase tracking-wider",
+                      isExpired 
+                        ? "bg-rose-200 text-rose-800 animate-pulse" 
+                        : "bg-amber-200 text-amber-800"
+                    )}>
+                      {isExpired 
+                        ? "Expirado" 
+                        : cert.diasRestantes === 0 
+                          ? "Expira hoje" 
+                          : `${cert.diasRestantes} dias`}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1 mt-1 text-[10px] text-neutral-600 font-medium">
+                    <span className="truncate">
+                      <strong className="text-neutral-800 font-semibold">Empresa:</strong> {cert.empresaNome}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Calendar size={11} className="text-neutral-400" />
+                      <strong className="text-neutral-800 font-semibold">Vencimento:</strong> {new Date(cert.validade).toLocaleDateString("pt-BR")}
+                    </span>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-dashed border-neutral-200 flex justify-end">
+                    <Link 
+                      href={`/esocial?tab=Automação S-5002&empresaId=${cert.empresaId}`} 
+                      className={cn(
+                        "text-[9px] font-black uppercase tracking-wider hover:underline flex items-center gap-0.5",
+                        isExpired ? "text-rose-700" : "text-amber-800"
+                      )}
+                    >
+                      Renovar Certificado <ArrowUpRight size={10} />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* STATIC MULTI-CONTAINER / GRID WRAPPER */}

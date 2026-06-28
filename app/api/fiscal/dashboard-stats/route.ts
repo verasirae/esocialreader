@@ -289,6 +289,34 @@ export async function GET(req: NextRequest) {
       alerts.push({ id: "a2", text: `Existem ${esocialErrors + reinfErrors} evento(s) com erros críticos de consistência de validação ou de estrutura.`, type: "danger" });
     }
 
+    // Buscar certificados digitais ativos para verificar expiração
+    const activeCertificados = await prisma.certificadoDigital.findMany({
+      where: { ativo: true },
+      include: {
+        empresa: {
+          select: {
+            razaoSocial: true,
+            nomeFantasia: true,
+          }
+        }
+      }
+    });
+
+    const now = new Date();
+    const expiringCertificates = activeCertificados.map(cert => {
+      const validadeDate = new Date(cert.validade);
+      const diffTime = validadeDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return {
+        id: cert.id,
+        nome: cert.nome,
+        validade: cert.validade.toISOString(),
+        empresaNome: cert.empresa.razaoSocial || cert.empresa.nomeFantasia || "Empresa Desconhecida",
+        empresaId: cert.empresaId,
+        diasRestantes: diffDays,
+      };
+    }).filter(cert => cert.diasRestantes <= 30);
+
     return NextResponse.json({
       success: true,
       indicators: {
@@ -325,7 +353,8 @@ export async function GET(req: NextRequest) {
       ano: targetYear,
       monthlySeries,
       timeline: mergedTimeline,
-      alerts: alerts
+      alerts: alerts,
+      expiringCertificates
     });
 
   } catch (err: any) {

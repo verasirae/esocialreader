@@ -1,11 +1,14 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { execSync } from "child_process";
 import { prisma } from "@/lib/prisma";
 
 const CERT_SECRET = process.env.JWT_SECRET || "compliance_portal_secret_key_1234567890";
-const CERT_DIR    = process.env.CERT_STORAGE_PATH || "./storage/certificados";
+const CERT_DIR = process.env.CERT_STORAGE_PATH
+  ? path.resolve(process.env.CERT_STORAGE_PATH)
+  : path.resolve(process.cwd(), "storage", "certificados");
 
 // Garante que o diretório existe
 function ensureCertDir() {
@@ -64,45 +67,61 @@ function extrairMetadadosNativo(
   pfxBuffer: Buffer,
   senha: string
 ): { validade: Date; fingerprint: string } {
-  // Usa arquivos temporários com OpenSSL CLI — disponível em qualquer ambiente Linux/Node
-  const tmpDir      = require("os").tmpdir();
-  const tmpPfx      = path.join(tmpDir, `cert_${Date.now()}.pfx`);
-  const tmpPem      = path.join(tmpDir, `cert_${Date.now()}.pem`);
+  const tmpDir = require("os").tmpdir();
+  const ts     = Date.now();
+  const tmpPfx = path.join(tmpDir, `cert_${ts}.pfx`);
+  const tmpPem = path.join(tmpDir, `cert_${ts}.pem`);
 
   try {
     fs.writeFileSync(tmpPfx, pfxBuffer);
 
-    // Extrai o certificado do PFX para PEM via OpenSSL
-    // Usando env:CERT_PWD para evitar qualquer problema de escape de caracteres na senha
-    execSync(
-      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpPem}" -legacy 2>/dev/null || ` +
+    // Tenta as três variações em ordem de compatibilidade:
+    // 1. Moderno (OpenSSL 3, AES-256)
+    // 2. Legado (3DES/RC2)
+    // 3. Sem verificação de MAC (alguns certificados ICP-Brasil com SHA-256 MAC)
+    const tentativas = [
       `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpPem}" 2>/dev/null`,
-      {
-        stdio: "pipe",
-        env: { ...process.env, CERT_PWD: senha }
-      }
-    );
+      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpPem}" -legacy 2>/dev/null`,
+      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpPem}" -nomacver 2>/dev/null`,
+      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpPem}" -legacy -nomacver 2>/dev/null`,
+    ];
 
-    // Extrai a data de validade
+    let extraido = false;
+    const env = { ...process.env, CERT_PWD: senha };
+
+    for (const cmd of tentativas) {
+      try {
+        execSync(cmd, { stdio: "pipe", env });
+        if (fs.existsSync(tmpPem) && fs.statSync(tmpPem).size > 0) {
+          extraido = true;
+          break;
+        }
+      } catch {
+        // Tenta próxima variação
+      }
+    }
+
+    if (!extraido) {
+      throw new Error("Nenhuma variação do OpenSSL conseguiu extrair o certificado.");
+    }
+
+    // Extrai validade
     const validadeRaw = execSync(
       `openssl x509 -in "${tmpPem}" -noout -enddate 2>/dev/null`,
-      { stdio: "pipe" }
-    ).toString().trim();
-    // Formato: "notAfter=Jun 22 00:00:00 2027 GMT"
-    const dateStr = validadeRaw.replace("notAfter=", "").trim();
-    const validade = new Date(dateStr);
+      { stdio: "pipe", env }
+    ).toString().trim().replace("notAfter=", "").trim();
 
-    // Extrai o fingerprint SHA-1
+    // Extrai fingerprint
     const fingerprintRaw = execSync(
       `openssl x509 -in "${tmpPem}" -noout -fingerprint -sha1 2>/dev/null`,
-      { stdio: "pipe" }
+      { stdio: "pipe", env }
     ).toString().trim();
-    // Formato: "SHA1 Fingerprint=AA:BB:CC:..."
-    const fingerprint = fingerprintRaw.split("=")[1] || "";
 
-    return { validade, fingerprint };
+    return {
+      validade:    new Date(validadeRaw),
+      fingerprint: fingerprintRaw.split("=")[1] || "",
+    };
   } finally {
-    // Limpa arquivos temporários sempre
     try { fs.unlinkSync(tmpPfx); } catch {}
     try { fs.unlinkSync(tmpPem); } catch {}
   }
@@ -117,6 +136,8 @@ export async function salvarCertificado(params: {
   nrInscCert?: string;
   ambiente:    "producao" | "producao_restrita";
 }): Promise<string> {
+  console.log("[CertificadoService] cwd:", process.cwd());
+  console.log("[CertificadoService] CERT_DIR:", CERT_DIR);
   ensureCertDir();
 
   // Extrai validade e fingerprint do certificado PFX
@@ -165,14 +186,103 @@ export async function lerCertificado(empresaId: string): Promise<{
 
   if (!cert) return null;
 
-  if (!fs.existsSync(cert.storagePath)) {
-    throw new Error(`Arquivo de certificado não encontrado: ${cert.storagePath}`);
+  // Resolve o caminho — suporta tanto absoluto (novo) quanto relativo (legado)
+  const certPath = path.isAbsolute(cert.storagePath)
+    ? cert.storagePath
+    : path.resolve(process.cwd(), cert.storagePath);
+
+  if (!fs.existsSync(certPath)) {
+    throw new Error(`Arquivo de certificado não encontrado: ${certPath}`);
+  }
+
+  // Atualiza o caminho no banco para absoluto se ainda era relativo (auto-migração)
+  if (!path.isAbsolute(cert.storagePath)) {
+    await prisma.certificadoDigital.update({
+      where: { id: cert.id },
+      data:  { storagePath: certPath },
+    });
   }
 
   return {
-    pfxBuffer: fs.readFileSync(cert.storagePath),
+    pfxBuffer: fs.readFileSync(certPath),
     senha:     descriptografarSenha(cert.senhaCriptografada),
     nrInsc:    cert.nrInscCert || "",
     ambiente:  cert.ambiente,
   };
 }
+
+/**
+ * Converte PFX → cert PEM + key PEM via OpenSSL CLI.
+ * Necessário porque o Node.js built-in TLS não suporta
+ * PFX com AES-256 (padrão ICP-Brasil A1 moderno).
+ */
+export function pfxParaPem(pfxBuffer: Buffer, senha: string): {
+  cert: Buffer;
+  key:  Buffer;
+} {
+  const tmpDir = os.tmpdir();
+  const ts     = Date.now();
+  const tmpPfx  = path.join(tmpDir, `tls_${ts}.pfx`);
+  const tmpCert = path.join(tmpDir, `tls_${ts}_cert.pem`);
+  const tmpKey  = path.join(tmpDir, `tls_${ts}_key.pem`);
+
+  try {
+    fs.writeFileSync(tmpPfx, pfxBuffer);
+    const env = { ...process.env, CERT_PWD: senha };
+
+    // Extrai certificado (cadeia completa)
+    const cmdsCert = [
+      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpCert}" 2>/dev/null`,
+      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpCert}" -legacy 2>/dev/null`,
+      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpCert}" -nomacver 2>/dev/null`,
+      `openssl pkcs12 -in "${tmpPfx}" -nokeys -passin env:CERT_PWD -out "${tmpCert}" -legacy -nomacver 2>/dev/null`,
+    ];
+
+    // Extrai chave privada (sem senha no PEM de saída)
+    const cmdsKey = [
+      `openssl pkcs12 -in "${tmpPfx}" -nocerts -nodes -passin env:CERT_PWD -out "${tmpKey}" 2>/dev/null`,
+      `openssl pkcs12 -in "${tmpPfx}" -nocerts -nodes -passin env:CERT_PWD -out "${tmpKey}" -legacy 2>/dev/null`,
+      `openssl pkcs12 -in "${tmpPfx}" -nocerts -nodes -passin env:CERT_PWD -out "${tmpKey}" -nomacver 2>/dev/null`,
+      `openssl pkcs12 -in "${tmpPfx}" -nocerts -nodes -passin env:CERT_PWD -out "${tmpKey}" -legacy -nomacver 2>/dev/null`,
+    ];
+
+    let certOk = false;
+    for (const cmd of cmdsCert) {
+      try {
+        execSync(cmd, { stdio: "pipe", env });
+        if (fs.existsSync(tmpCert) && fs.statSync(tmpCert).size > 0) {
+          certOk = true;
+          break;
+        }
+      } catch {}
+    }
+
+    let keyOk = false;
+    for (const cmd of cmdsKey) {
+      try {
+        execSync(cmd, { stdio: "pipe", env });
+        if (fs.existsSync(tmpKey) && fs.statSync(tmpKey).size > 0) {
+          keyOk = true;
+          break;
+        }
+      } catch {}
+    }
+
+    if (!certOk || !keyOk) {
+      throw new Error(
+        `OpenSSL não conseguiu extrair ${!certOk ? "certificado" : "chave privada"} do PFX. ` +
+        `Verifique se a senha está correta e se o arquivo é um PFX/P12 válido.`
+      );
+    }
+
+    return {
+      cert: fs.readFileSync(tmpCert),
+      key:  fs.readFileSync(tmpKey),
+    };
+  } finally {
+    try { fs.unlinkSync(tmpPfx);  } catch {}
+    try { fs.unlinkSync(tmpCert); } catch {}
+    try { fs.unlinkSync(tmpKey);  } catch {}
+  }
+}
+

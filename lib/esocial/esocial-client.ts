@@ -1,5 +1,5 @@
 import https from "https";
-import { lerCertificado } from "./certificado.service";
+import { lerCertificado, pfxParaPem } from "./certificado.service";
 
 // URLs dos webservices por ambiente
 const WS_URLS = {
@@ -13,13 +13,46 @@ const WS_URLS = {
   },
 };
 
+// Cache em memória dos PEMs por empresaId para evitar conversão a cada chamada
+const pemCache = new Map<string, { cert: Buffer; key: Buffer; expiresAt: number }>();
+
+async function buildTlsAgent(empresaId: string, pfxBuffer: Buffer, senha: string): Promise<https.Agent> {
+  const cacheKey = empresaId;
+  const cached   = pemCache.get(cacheKey);
+
+  // Cache de 30 minutos
+  if (cached && cached.expiresAt > Date.now()) {
+    return new https.Agent({
+      cert:               cached.cert,
+      key:                cached.key,
+      rejectUnauthorized: false,
+    });
+  }
+
+  // Converte PFX → PEM via OpenSSL CLI (suporta AES-256 ICP-Brasil)
+  const { cert, key } = pfxParaPem(pfxBuffer, senha);
+
+  pemCache.set(cacheKey, {
+    cert,
+    key,
+    expiresAt: Date.now() + 30 * 60 * 1000,
+  });
+
+  return new https.Agent({
+    cert,
+    key,
+    rejectUnauthorized: false,
+  });
+}
+
 // Faz a chamada SOAP usando o módulo nativo https para suportar autenticação mútua mTLS
 async function chamadaSoap(
-  urlStr:  string,
-  action:  string,
-  body:    string,
+  urlStr:    string,
+  action:    string,
+  body:      string,
+  empresaId: string,
   pfxBuffer: Buffer,
-  senha:   string
+  senha:     string
 ): Promise<string> {
   const envelope = `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope
@@ -30,21 +63,20 @@ async function chamadaSoap(
   <soap:Body>${body}</soap:Body>
 </soap:Envelope>`;
 
-  const url = new URL(urlStr);
+  const url   = new URL(urlStr);
+  const agent = await buildTlsAgent(empresaId, pfxBuffer, senha);
 
   const options: https.RequestOptions = {
     method: "POST",
-    host: url.hostname,
-    path: url.pathname,
-    port: url.port || 443,
-    pfx: pfxBuffer,
-    passphrase: senha,
-    rejectUnauthorized: false, // Permite ambientes de teste ICP-Brasil sem erro de cadeia
+    host:   url.hostname,
+    path:   url.pathname,
+    port:   url.port || 443,
+    agent,
     headers: {
-      "Content-Type": "application/soap+xml; charset=utf-8",
-      "SOAPAction": action,
-      "Content-Length": Buffer.byteLength(envelope),
-    }
+      "Content-Type":   "application/soap+xml; charset=utf-8",
+      "SOAPAction":      action,
+      "Content-Length":  Buffer.byteLength(envelope),
+    },
   };
 
   return new Promise((resolve, reject) => {
@@ -118,6 +150,7 @@ export async function consultarIdentificadoresS5002(params: {
     url,
     "ConsultarIdentificadoresEventosEmpregador",
     xmlBody,
+    params.empresaId,
     certData.pfxBuffer,
     certData.senha
   );
@@ -170,6 +203,7 @@ export async function downloadEventosPorId(params: {
     url,
     "SolicitarDownloadEventosPorId",
     xmlBody,
+    params.empresaId,
     certData.pfxBuffer,
     certData.senha
   );
